@@ -1,4 +1,4 @@
-name: Publish v1.0.1 tag
+name: Publish v1.0.2 tag
 
 on:
   push:
@@ -23,8 +23,8 @@ jobs:
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < VERSION)"
-          test "$version" = "1.0.1"
-          grep -Fq '## [1.0.1] - 2026-07-07' CHANGELOG.md
+          test "$version" = "1.0.2"
+          grep -Fq '## [1.0.2] - 2026-07-07' CHANGELOG.md
           if git ls-remote --exit-code --tags origin "refs/tags/v${version}" >/dev/null 2>&1; then
             echo "Tag v${version} already exists; refusing to replace it."
             exit 1
