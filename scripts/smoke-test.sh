@@ -66,14 +66,13 @@ query_name = sys.argv[3].rstrip(".")
 mode = sys.argv[4]
 
 labels = query_name.split(".")
-if not labels or any(not label or len(label.encode("idna")) > 63 for label in labels):
+encoded_labels = [label.encode("idna") for label in labels]
+if not encoded_labels or any(not label or len(label) > 63 for label in encoded_labels):
     raise SystemExit(2)
 
 transaction_id = random.randint(0, 65535)
 header = struct.pack("!HHHHHH", transaction_id, 0x0100, 1, 0, 0, 0)
-question = b"".join(
-    bytes([len(label.encode("idna"))]) + label.encode("idna") for label in labels
-)
+question = b"".join(bytes([len(label)]) + label for label in encoded_labels)
 question += b"\x00" + struct.pack("!HH", 1, 1)
 packet = header + question
 
@@ -91,10 +90,11 @@ rcode = flags & 0x000F
 if response_id != transaction_id or not is_response:
     raise SystemExit(1)
 
-if mode == "response":
-    # Any syntactically valid DNS response, including NXDOMAIN, proves that
-    # the query reached a resolver. This is used for the uncached failover probe.
-    raise SystemExit(0)
+if mode == "upstream":
+    # NOERROR (0) and NXDOMAIN (3) are normal authoritative/resolver results.
+    # SERVFAIL (2), REFUSED (5), or a timeout are local failure outcomes and
+    # therefore count as fail-closed rather than as evidence of DNS leakage.
+    raise SystemExit(0 if rcode in {0, 3} else 1)
 
 if mode == "answer" and rcode == 0 and answers >= 1:
     raise SystemExit(0)
@@ -202,22 +202,22 @@ if [[ "$WITH_FAILOVER" == "true" ]]; then
         ORIGINAL_CONNECTED=true
     fi
 
-    # Use unique names and accept any valid response, including NXDOMAIN. A
-    # fixed successful name such as example.com may be served from dnsmasq's
-    # cache after disconnect and would create a false fail-closed failure.
+    # Use unique names so dnsmasq cannot satisfy the checks from its cache.
+    # A normal upstream result is NOERROR or NXDOMAIN. Local SERVFAIL/REFUSED
+    # after disconnect is an expected fail-closed result.
     baseline_probe="vpn-control-before-$(date +%s%N)-$$.example.com"
     blocked_probe="vpn-control-after-$(date +%s%N)-$$.example.com"
     check "Uncached DNS probe reaches upstream before disconnect" \
-        dns_probe "$LAN_IP" 5 "$baseline_probe" response
+        dns_probe "$LAN_IP" 5 "$baseline_probe" upstream
 
     printf '\nRunning failover test: disconnecting NordVPN...\n'
     nordvpn_as_user disconnect >/dev/null
     sleep 8
 
-    if dns_probe "$LAN_IP" 3 "$blocked_probe" response >/dev/null 2>&1; then
-        fail "Uncached DNS query received a response after VPN disconnect"
+    if dns_probe "$LAN_IP" 3 "$blocked_probe" upstream >/dev/null 2>&1; then
+        fail "Uncached DNS query reached an upstream resolver after VPN disconnect"
     else
-        pass "Uncached DNS query is blocked after VPN disconnect"
+        pass "Uncached DNS query is fail-closed after VPN disconnect"
     fi
 
     check "Blackhole route remains after disconnect" \
