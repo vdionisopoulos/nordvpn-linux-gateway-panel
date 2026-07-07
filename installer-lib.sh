@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 
-PROJECT_VERSION="0.3.0"
+PROJECT_VERSION="$(tr -d '[:space:]' < "${SCRIPT_DIR}/VERSION")"
 STATE_FILE="/var/lib/vpn-control/install-state.json"
 RUNTIME_CONFIG="/var/lib/vpn-control/config.json"
 DNS_CONFIG="/etc/vpn-control/dnsmasq.conf"
+
+[[ -n "$PROJECT_VERSION" ]] || {
+    echo "[vpn-control] ERROR: VERSION is empty." >&2
+    exit 1
+}
 
 log() {
     printf '[vpn-control] %s\n' "$*"
@@ -58,6 +63,16 @@ backup_file() {
 
     if [[ -e "$path" ]]; then
         cp -a -- "$path" "${path}.backup.${stamp}"
+    fi
+}
+
+restore_backup() {
+    local path="$1"
+    local stamp="$2"
+    local backup="${path}.backup.${stamp}"
+
+    if [[ -e "$backup" ]]; then
+        cp -a -- "$backup" "$path"
     fi
 }
 
