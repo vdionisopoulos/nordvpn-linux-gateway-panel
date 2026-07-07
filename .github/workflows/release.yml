@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(cat VERSION)"
+          test "$GITHUB_REF_NAME" = "v${version}"
+          grep -Fq "APP_VERSION = \"${version}\"" app.py
+          grep -Fq "PROJECT_VERSION=\"${version}\"" installer-lib.sh
+          grep -Fq "--arg version \"${version}\"" gateway.sh
+
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq nftables shellcheck dnsmasq-base zip
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run validation suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruff check .
+          pytest
+          bash -n gateway.sh install.sh update.sh uninstall.sh installer-lib.sh scripts/smoke-test.sh
+          shellcheck -x gateway.sh install.sh update.sh uninstall.sh scripts/smoke-test.sh
+          VPN_CONFIG_PATH=config.example.json ./gateway.sh --render-nft > /tmp/vpn-control.nft
+          sudo nft -c -f /tmp/vpn-control.nft
+
+      - name: Validate systemd units
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo useradd --system --no-create-home --shell /usr/sbin/nologin vpn-dns || true
+          sudo install -d /opt/vpn-control/.venv/bin /etc/vpn-control /usr/local/sbin
+          sudo install -m 0755 gateway.sh /usr/local/sbin/tv-vpn-gateway
+          sudo touch /opt/vpn-control/.venv/bin/gunicorn
+          sudo chmod 0755 /opt/vpn-control/.venv/bin/gunicorn
+          sudo touch /etc/vpn-control/dnsmasq.conf /etc/vpn-control-web.env
+          sed "s/__VPN_USER__/${USER}/g" vpn-control-web.service > /tmp/vpn-control-web.service
+          systemd-analyze verify \
+            vpn-control-dns.service \
+            tv-vpn-gateway.service \
+            /tmp/vpn-control-web.service
+
+      - name: Build release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(cat VERSION)"
+          package="nordvpn-linux-gateway-panel-${version}"
+          mkdir -p dist
+          git archive --format=tar --prefix="${package}/" HEAD | gzip -9 > "dist/${package}.tar.gz"
+          git archive --format=zip --prefix="${package}/" HEAD > "dist/${package}.zip"
+          (cd dist && sha256sum "${package}.tar.gz" "${package}.zip" > SHA256SUMS)
+          awk '
+            /^## \[1\.0\.0\]/ {capture=1; next}
+            /^## \[/ && capture {exit}
+            capture {print}
+          ' CHANGELOG.md > /tmp/release-notes.md
+          test -s /tmp/release-notes.md
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(cat VERSION)"
+          gh release create "$GITHUB_REF_NAME" \
+            dist/* \
+            --verify-tag \
+            --title "NordVPN Linux Gateway Panel ${version}" \
+            --notes-file /tmp/release-notes.md
