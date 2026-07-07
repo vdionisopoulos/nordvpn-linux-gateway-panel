@@ -1,7 +1,7 @@
 [Unit]
 Description=VPN Control Web Panel
-Wants=network-online.target
-After=network-online.target nordvpnd.service
+Wants=network-online.target tv-vpn-gateway.service
+After=network-online.target nordvpnd.service tv-vpn-gateway.service
 
 [Service]
 Type=simple
@@ -10,13 +10,25 @@ Group=__VPN_USER__
 SupplementaryGroups=nordvpn
 WorkingDirectory=/opt/vpn-control
 EnvironmentFile=/etc/vpn-control-web.env
-Environment=HOME=/home/__VPN_USER__
+Environment=HOME=/var/lib/vpn-control
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/opt/vpn-control/.venv/bin/gunicorn --workers 1 --threads 4 --timeout 120 --bind ${VPN_WEB_BIND}:${VPN_WEB_PORT} app:app
 Restart=always
 RestartSec=5
-NoNewPrivileges=true
-PrivateTmp=true
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/vpn-control
+ReadOnlyPaths=/run/vpn-control
 
 [Install]
 WantedBy=multi-user.target
