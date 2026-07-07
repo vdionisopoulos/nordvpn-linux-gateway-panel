@@ -66,3 +66,12 @@ jobs:
             vpn-control-dns.service \
             tv-vpn-gateway.service \
             /tmp/vpn-control-web.service
+
+      - name: Validate required sandbox access
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'CapabilityBoundingSet=CAP_NET_ADMIN CAP_DAC_READ_SEARCH' \
+            tv-vpn-gateway.service
+          grep -Eq '^RestrictAddressFamilies=.*AF_NETLINK' \
+            vpn-control-dns.service
