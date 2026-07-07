@@ -1,0 +1,131 @@
+name: Update README screenshot
+
+on:
+  push:
+    branches:
+      - release-v1.0.1
+    paths:
+      - .github/workflows/update-readme-screenshot.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-readmes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release-v1.0.1
+          fetch-depth: 0
+
+      - name: Embed screenshot and refresh release text
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          readme = Path("README.md")
+          text = readme.read_text(encoding="utf-8")
+          text = text.replace("Current release: **1.0.0**", "Current release: **1.0.1**")
+
+          marker = "- HTTP Basic Authentication, CSRF protection, and atomic configuration writes\n"
+          screenshot = (
+              "\n## Screenshot\n\n"
+              "![VPN Control Panel showing healthy gateway, protected DNS, and managed devices](docs/panel.png)\n"
+          )
+          if "![VPN Control Panel" not in text:
+              assert marker in text
+              text = text.replace(marker, marker + screenshot, 1)
+
+          old_transition = '''The exact subnet is added **before** LAN Discovery is disabled, preventing an active SSH session from being locked out:
+
+```bash
+nordvpn allowlist add subnet 192.168.1.0/24
+nordvpn set technology nordlynx
+nordvpn set routing on
+nordvpn set firewall on
+nordvpn set killswitch off
+nordvpn set lan-discovery off
+```
+'''
+          new_transition = '''The installer performs the LAN access transition inside a local transient systemd unit. It disables LAN Discovery and immediately adds the exact subnet allowlist; if the allowlist step fails, LAN Discovery is restored. The local unit keeps running even if the SSH session pauses:
+
+```bash
+nordvpn set technology nordlynx
+nordvpn set routing on
+nordvpn set firewall on
+nordvpn set killswitch off
+nordvpn set lan-discovery off
+nordvpn allowlist add subnet 192.168.1.0/24
+```
+'''
+          assert old_transition in text
+          text = text.replace(old_transition, new_transition, 1)
+
+          text = text.replace(
+              "DNS checks:\n\n```bash\nnslookup example.com GATEWAY-IP",
+              "DNS checks from a managed device, or locally on the gateway:\n\n```bash\nnslookup example.com GATEWAY-IP",
+              1,
+          )
+          text = text.replace("A signed tag such as `v1.0.0`", "A signed tag such as `v1.0.1`")
+          readme.write_text(text, encoding="utf-8")
+
+          readme_el = Path("README.el.md")
+          text = readme_el.read_text(encoding="utf-8")
+          text = text.replace("Τρέχουσα έκδοση: **1.0.0**", "Τρέχουσα έκδοση: **1.0.1**")
+
+          marker = "- Smoke test με προαιρετικό disconnect/reconnect του NordVPN\n"
+          screenshot = (
+              "\n## Στιγμιότυπο του panel\n\n"
+              "![VPN Control Panel με healthy gateway, protected DNS και managed συσκευές](docs/panel.png)\n"
+          )
+          if "![VPN Control Panel με" not in text:
+              assert marker in text
+              text = text.replace(marker, marker + screenshot, 1)
+
+          old_transition = '''Το LAN subnet προστίθεται στην allowlist πριν απενεργοποιηθεί το LAN Discovery, ώστε να μη χαθεί η πρόσβαση SSH ή στο panel:
+
+```bash
+nordvpn allowlist add subnet 192.168.1.0/24
+nordvpn set technology nordlynx
+nordvpn set routing on
+nordvpn set firewall on
+nordvpn set killswitch off
+nordvpn set lan-discovery off
+```
+'''
+          new_transition = '''Ο installer εκτελεί τη μετάβαση LAN access μέσα από τοπικό transient systemd unit. Απενεργοποιεί το LAN Discovery και προσθέτει αμέσως το ακριβές subnet στην allowlist. Αν αποτύχει η allowlist, επαναφέρει το LAN Discovery. Το local unit συνεχίζει ακόμη και αν διακοπεί προσωρινά το SSH:
+
+```bash
+nordvpn set technology nordlynx
+nordvpn set routing on
+nordvpn set firewall on
+nordvpn set killswitch off
+nordvpn set lan-discovery off
+nordvpn allowlist add subnet 192.168.1.0/24
+```
+'''
+          assert old_transition in text
+          text = text.replace(old_transition, new_transition, 1)
+
+          text = text.replace("Η έκδοση `1.0.0` ενημερώνει", "Η έκδοση `1.0.1` ενημερώνει")
+          text = text.replace(
+              "DNS verification:\n\n```bash\nnslookup example.com IP-ΤΗΣ-VM",
+              "DNS verification από managed συσκευή ή τοπικά στο gateway:\n\n```bash\nnslookup example.com IP-ΤΗΣ-VM",
+              1,
+          )
+          text = text.replace("Το tag `v1.0.0`", "Το tag `v1.0.1`")
+          readme_el.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Commit README updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md README.el.md
+          git diff --cached --check
+          git commit -m "Embed panel screenshot in documentation"
+          git push origin HEAD:release-v1.0.1
