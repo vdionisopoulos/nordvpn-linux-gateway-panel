@@ -7,102 +7,69 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=installer-lib.sh
+source "$SCRIPT_DIR/installer-lib.sh"
+
 VPN_USER="${VPN_USER:-${SUDO_USER:-}}"
 WEB_PORT="${WEB_PORT:-8080}"
 WEB_USER="${WEB_USER:-admin}"
 DEFAULT_COUNTRY="${DEFAULT_COUNTRY:-gr}"
 
-if [[ -z "$VPN_USER" ]]; then
-    echo "Could not determine the non-root account. Run with sudo or set VPN_USER explicitly."
-    exit 1
+[[ -n "$VPN_USER" ]] || die "Could not determine the non-root account. Set VPN_USER explicitly."
+id "$VPN_USER" >/dev/null 2>&1 || die "User not found: $VPN_USER"
+
+if [[ -e /etc/systemd/system/vpn-control-web.service || -e /opt/vpn-control/app.py ]]; then
+    die "An existing installation was detected. Use 'sudo ./update.sh' instead."
 fi
 
-id "$VPN_USER" >/dev/null 2>&1 || {
-    echo "User not found: $VPN_USER"
-    exit 1
-}
-
-command -v nordvpn >/dev/null 2>&1 || {
-    echo "NordVPN Linux CLI is not installed. Install it and log in before running this installer."
-    exit 1
-}
+command -v nordvpn >/dev/null 2>&1 || die "NordVPN Linux CLI is not installed."
 
 LAN_IF="${LAN_IF:-$(ip -4 route show default | awk 'NR==1 {print $5}')}"
-if [[ -z "$LAN_IF" ]]; then
-    echo "Could not detect the LAN interface. Set LAN_IF explicitly."
-    exit 1
-fi
+[[ -n "$LAN_IF" ]] || die "Could not detect the LAN interface. Set LAN_IF explicitly."
 
 BIND_IP="${BIND_IP:-$(ip -4 -o addr show dev "$LAN_IF" scope global | awk 'NR==1 {split($4,a,"/"); print a[1]}')}"
-# Fallback kept separate to avoid obscure shell errors on unusual ip output.
-if [[ -z "${BIND_IP:-}" ]]; then
-    BIND_IP="$(ip -4 -o addr show dev "$LAN_IF" scope global | awk 'NR==1 {print $4}' | cut -d/ -f1)"
-fi
 LAN_NET="${LAN_NET:-$(ip -4 route show dev "$LAN_IF" proto kernel scope link | awk 'NR==1 {print $1}')}"
+[[ -n "$BIND_IP" && -n "$LAN_NET" ]] || die "Could not detect BIND_IP or LAN_NET."
 
-if [[ -z "$BIND_IP" || -z "$LAN_NET" ]]; then
-    echo "Could not auto-detect BIND_IP or LAN_NET. Set them explicitly."
-    exit 1
+FORWARDING_WAS_ENABLED=false
+[[ "$(sysctl -n net.ipv4.ip_forward)" == "1" ]] && FORWARDING_WAS_ENABLED=true
+
+NORDVPN_GROUP_ADDED=false
+groupadd -f nordvpn
+if ! id -nG "$VPN_USER" | tr ' ' '\n' | grep -Fxq nordvpn; then
+    usermod -aG nordvpn "$VPN_USER"
+    NORDVPN_GROUP_ADDED=true
 fi
 
-echo "Installing packages..."
+ensure_nordvpn_settings "$LAN_NET"
+
+log "Installing Ubuntu packages..."
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    python3 python3-venv python3-pip jq nftables curl
+    python3 python3-venv python3-pip jq nftables curl dnsmasq-base
+
+ensure_dns_user
 
 install -d -m 0755 /opt/vpn-control
 install -m 0644 "$SCRIPT_DIR/app.py" /opt/vpn-control/app.py
+install -m 0644 "$SCRIPT_DIR/validation.py" /opt/vpn-control/validation.py
 install -m 0644 "$SCRIPT_DIR/requirements.txt" /opt/vpn-control/requirements.txt
 
 python3 -m venv /opt/vpn-control/.venv
 /opt/vpn-control/.venv/bin/pip install --upgrade pip
 /opt/vpn-control/.venv/bin/pip install -r /opt/vpn-control/requirements.txt
 
-install -d -o "$VPN_USER" -g "$VPN_USER" -m 0750 /var/lib/vpn-control
+migrate_runtime_config "$DEFAULT_COUNTRY" "$LAN_IF" "$BIND_IP" "$LAN_NET" "$VPN_USER"
+write_dns_config "$BIND_IP"
 
-if [[ ! -f /var/lib/vpn-control/config.json ]]; then
-    jq -n \
-      --arg country "$DEFAULT_COUNTRY" \
-      --arg lan_if "$LAN_IF" \
-      --arg lan_ip "$BIND_IP" \
-      --arg lan_net "$LAN_NET" \
-      '{
-        country: $country,
-        devices: [],
-        lan_if: $lan_if,
-        lan_ip: $lan_ip,
-        lan_net: $lan_net,
-        vpn_if: "nordlynx",
-        route_table: 200,
-        rule_priority: 10000,
-        check_interval: 5
-      }' > /var/lib/vpn-control/config.json
-    chown "$VPN_USER:$VPN_USER" /var/lib/vpn-control/config.json
-    chmod 0640 /var/lib/vpn-control/config.json
-else
-    echo "Keeping existing /var/lib/vpn-control/config.json"
-fi
-
-if [[ -f /usr/local/sbin/tv-vpn-gateway ]]; then
-    cp -a /usr/local/sbin/tv-vpn-gateway \
-        "/usr/local/sbin/tv-vpn-gateway.backup.$(date +%Y%m%d-%H%M%S)"
-fi
 install -m 0755 "$SCRIPT_DIR/gateway.sh" /usr/local/sbin/tv-vpn-gateway
-
-if [[ -f /etc/systemd/system/tv-vpn-gateway.service ]]; then
-    cp -a /etc/systemd/system/tv-vpn-gateway.service \
-        "/etc/systemd/system/tv-vpn-gateway.service.backup.$(date +%Y%m%d-%H%M%S)"
-fi
 install -m 0644 "$SCRIPT_DIR/tv-vpn-gateway.service" \
     /etc/systemd/system/tv-vpn-gateway.service
-
-sed "s/__VPN_USER__/${VPN_USER}/g" \
-    "$SCRIPT_DIR/vpn-control-web.service" \
+install -m 0644 "$SCRIPT_DIR/vpn-control-dns.service" \
+    /etc/systemd/system/vpn-control-dns.service
+sed "s/__VPN_USER__/${VPN_USER}/g" "$SCRIPT_DIR/vpn-control-web.service" \
     > /etc/systemd/system/vpn-control-web.service
 chmod 0644 /etc/systemd/system/vpn-control-web.service
-
-groupadd -f nordvpn
-usermod -aG nordvpn "$VPN_USER"
 
 if [[ -z "${WEB_PASSWORD:-}" ]]; then
     read -rsp "Web password for user '${WEB_USER}' (Enter = generate): " WEB_PASSWORD
@@ -110,11 +77,10 @@ if [[ -z "${WEB_PASSWORD:-}" ]]; then
 fi
 if [[ -z "${WEB_PASSWORD:-}" ]]; then
     WEB_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')"
-    GENERATED_PASSWORD=1
+    GENERATED_PASSWORD=true
 else
-    GENERATED_PASSWORD=0
+    GENERATED_PASSWORD=false
 fi
-
 SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
 
 umask 077
@@ -125,34 +91,60 @@ VPN_WEB_USER=${WEB_USER}
 VPN_WEB_PASSWORD=${WEB_PASSWORD}
 VPN_WEB_SECRET_KEY=${SECRET_KEY}
 VPN_CONFIG_PATH=/var/lib/vpn-control/config.json
+VPN_HEALTH_PATH=/run/vpn-control/gateway-health.json
 VPN_COMMAND_TIMEOUT=90
 ENVEOF
 chmod 0600 /etc/vpn-control-web.env
 
-cat > /etc/sysctl.d/99-vpn-gateway.conf <<'SYSCTLEOF'
-net.ipv4.ip_forward = 1
-SYSCTLEOF
-sysctl --system >/dev/null
+# Forwarding is intentionally enabled by the gateway service only after the
+# policy rules, blackhole route and nftables guard are in place.
+rm -f /etc/sysctl.d/99-vpn-gateway.conf /etc/sysctl.d/99-tv-vpn-gateway.conf
+sysctl -q -w net.ipv4.ip_forward=0
+
+write_install_state \
+    "$FORWARDING_WAS_ENABLED" \
+    "$NORDVPN_GROUP_ADDED" \
+    "$NORDVPN_ALLOWLIST_ADDED" \
+    "$VPN_DNS_USER_CREATED"
 
 systemctl daemon-reload
-systemctl enable tv-vpn-gateway.service vpn-control-web.service
+if command -v systemd-analyze >/dev/null 2>&1; then
+    systemd-analyze verify \
+        /etc/systemd/system/vpn-control-dns.service \
+        /etc/systemd/system/tv-vpn-gateway.service \
+        /etc/systemd/system/vpn-control-web.service
+fi
+
+systemctl enable vpn-control-dns.service tv-vpn-gateway.service vpn-control-web.service
+systemctl restart vpn-control-dns.service
 systemctl restart tv-vpn-gateway.service
 systemctl restart vpn-control-web.service
 
-COUNTRY="$(jq -r '.country // "gr"' /var/lib/vpn-control/config.json)"
-runuser -u "$VPN_USER" -- nordvpn set autoconnect on "$COUNTRY" || true
+COUNTRY="$(jq -r '.country // "gr"' "$RUNTIME_CONFIG")"
+nordvpn_as_user set autoconnect on "$COUNTRY"
+nordvpn_as_user connect "$COUNTRY" || log "NordVPN connection was not established automatically; fail-closed protection remains active."
 
-echo
-echo "Installation complete."
-echo "URL:      http://${BIND_IP}:${WEB_PORT}"
-echo "Username: ${WEB_USER}"
-if [[ "$GENERATED_PASSWORD" -eq 1 ]]; then
+sleep 2
+systemctl --no-pager --full status \
+    vpn-control-dns.service tv-vpn-gateway.service vpn-control-web.service
+
+cat <<EOF
+
+Installation complete.
+URL:      http://${BIND_IP}:${WEB_PORT}
+Username: ${WEB_USER}
+DNS:      ${BIND_IP}
+EOF
+if [[ "$GENERATED_PASSWORD" == "true" ]]; then
     echo "Password: ${WEB_PASSWORD}"
 else
     echo "Password: the password you entered"
 fi
-echo
-echo "Do not expose port ${WEB_PORT} to the Internet."
-echo "Check services:"
-echo "  systemctl status tv-vpn-gateway.service --no-pager"
-echo "  systemctl status vpn-control-web.service --no-pager"
+cat <<EOF
+
+Configure every managed device with:
+  Gateway: ${BIND_IP}
+  DNS:     ${BIND_IP}
+
+Do not expose port ${WEB_PORT} to the Internet.
+EOF
