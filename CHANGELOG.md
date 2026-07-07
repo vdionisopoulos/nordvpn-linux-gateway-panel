@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## [1.0.1] - Unreleased
+
+### Changed
+
+- Protected DNS is now an explicit mandatory component rather than a misleading optional runtime toggle
+- Runtime configuration migration removes the obsolete `dns_enabled` key
+- DNS verification documentation now distinguishes managed-device tests from intentionally blocked non-managed LAN hosts
+
+### Fixed
+
+- Prevented disabled-looking DNS configuration from producing permanently degraded health and failed updates
+- Added a configuration contract test to prevent the obsolete DNS toggle from returning
+
 ## [1.0.0] - 2026-07-07
 
 First stable release of the NordVPN Linux Gateway Panel.

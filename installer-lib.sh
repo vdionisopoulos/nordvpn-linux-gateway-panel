@@ -194,11 +194,28 @@ ensure_dns_user() {
 
 write_dns_config() {
     local bind_ip="$1"
-    local upstream_1="${2:-103.86.96.100}"
-    local upstream_2="${3:-103.86.99.100}"
+    local upstream
+    local -a upstreams=()
+
+    mapfile -t upstreams < <(
+        jq -er '
+            .dns_upstreams
+            | select(type == "array" and length > 0)
+            | .[]
+            | select(type == "string" and length > 0)
+        ' "$RUNTIME_CONFIG"
+    )
+
+    ((${#upstreams[@]} > 0)) || die "At least one DNS upstream must be configured."
+
+    for upstream in "${upstreams[@]}"; do
+        [[ "$upstream" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || \
+            die "DNS upstream must be an IPv4 address: $upstream"
+    done
 
     install -d -m 0755 /etc/vpn-control
-    cat > "$DNS_CONFIG" <<EOF
+    {
+        cat <<EOF
 # Managed by nordvpn-linux-gateway-panel ${PROJECT_VERSION}
 port=53
 listen-address=${bind_ip}
@@ -206,14 +223,18 @@ bind-interfaces
 pid-file=/run/vpn-control-dns/dnsmasq.pid
 no-resolv
 no-poll
-server=${upstream_1}
-server=${upstream_2}
+EOF
+        for upstream in "${upstreams[@]}"; do
+            printf 'server=%s\n' "$upstream"
+        done
+        cat <<'EOF'
 cache-size=1000
 domain-needed
 bogus-priv
 stop-dns-rebind
 dns-forward-max=150
 EOF
+    } > "$DNS_CONFIG"
     chmod 0644 "$DNS_CONFIG"
 }
 
@@ -243,7 +264,7 @@ migrate_runtime_config() {
              .route_table //= 200 |
              .rule_priority //= 10000 |
              .check_interval //= 5 |
-             .dns_enabled = true |
+             del(.dns_enabled) |
              .dns_user = "vpn-dns" |
              .dns_rule_priority //= 9999 |
              .dns_upstreams //= ["103.86.96.100", "103.86.99.100"]' \
@@ -267,7 +288,6 @@ migrate_runtime_config() {
                 route_table: 200,
                 rule_priority: 10000,
                 check_interval: 5,
-                dns_enabled: true,
                 dns_user: "vpn-dns",
                 dns_rule_priority: 9999,
                 dns_upstreams: ["103.86.96.100", "103.86.99.100"]

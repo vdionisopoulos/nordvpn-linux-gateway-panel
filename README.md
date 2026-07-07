@@ -2,7 +2,7 @@
 
 A lightweight Ubuntu gateway and LAN-only web panel for routing selected TVs, tablets, consoles, and other devices through NordVPN NordLynx.
 
-Current release: **1.0.0**
+Current release: **1.0.1**
 
 ## Features
 
@@ -16,6 +16,10 @@ Current release: **1.0.0**
 - Transactional updates with managed-file rollback
 - Installed-gateway smoke test, including optional VPN failover validation
 - HTTP Basic Authentication, CSRF protection, and atomic configuration writes
+
+## Screenshot
+
+![VPN Control Panel showing healthy gateway, protected DNS, and managed devices](docs/panel.png)
 
 ## Architecture
 
@@ -87,15 +91,15 @@ The installer configures these settings automatically:
 | Allowlisted subnet | Exact LAN subnet | Preserves SSH, DNS, and web-panel LAN access |
 | Auto-connect | `on <country>` | Restores the selected country after reboot |
 
-The exact subnet is added **before** LAN Discovery is disabled, preventing an active SSH session from being locked out:
+The installer performs the LAN access transition inside a local transient systemd unit. It disables LAN Discovery and immediately adds the exact subnet allowlist; if the allowlist step fails, LAN Discovery is restored. The local unit keeps running even if the SSH session pauses:
 
 ```bash
-nordvpn allowlist add subnet 192.168.1.0/24
 nordvpn set technology nordlynx
 nordvpn set routing on
 nordvpn set firewall on
 nordvpn set killswitch off
 nordvpn set lan-discovery off
+nordvpn allowlist add subnet 192.168.1.0/24
 ```
 
 ### Managed-device configuration
@@ -205,13 +209,15 @@ sudo nft list table ip tv_vpn_nat
 cat /run/vpn-control/gateway-health.json
 ```
 
-DNS checks:
+DNS checks from a managed device, or locally on the gateway:
 
 ```bash
 nslookup example.com GATEWAY-IP
 sudo tcpdump -ni eth0 'port 53'
 sudo tcpdump -ni nordlynx 'port 53'
 ```
+
+DNS requests from non-managed LAN hosts are intentionally dropped by nftables.
 
 ## Health model
 
@@ -241,7 +247,7 @@ CI also validates the rendered nftables ruleset with `nft -c -f` and verifies th
 
 ## Releases
 
-See [CHANGELOG.md](CHANGELOG.md) for release history and [the stable release checklist](docs/release-checklist.md) for release gates. A signed tag such as `v1.0.0` triggers a validated release workflow that creates ZIP and tar.gz archives plus SHA-256 checksums.
+See [CHANGELOG.md](CHANGELOG.md) for release history and [the stable release checklist](docs/release-checklist.md) for release gates. A signed tag such as `v1.0.1` triggers a validated release workflow that creates ZIP and tar.gz archives plus SHA-256 checksums.
 
 ## Security
 

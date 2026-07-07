@@ -51,7 +51,6 @@ load_config() {
     ROUTE_TABLE="$(jq -r '.route_table' "$CONFIG_FILE")"
     RULE_PRIORITY="$(jq -r '.rule_priority' "$CONFIG_FILE")"
     CHECK_INTERVAL="$(jq -r '.check_interval // 5' "$CONFIG_FILE")"
-    DNS_ENABLED="$(jq -r '.dns_enabled // true' "$CONFIG_FILE")"
     DNS_USER="$(jq -r '.dns_user // "vpn-dns"' "$CONFIG_FILE")"
     DNS_RULE_PRIORITY="$(jq -r '.dns_rule_priority // 9999' "$CONFIG_FILE")"
 
@@ -90,18 +89,17 @@ install_policy_rules() {
     local index=0
     local client_ip
 
-    if [[ "$DNS_ENABLED" == "true" ]]; then
-        if ! id "$DNS_USER" >/dev/null 2>&1; then
-            log "DNS user does not exist: $DNS_USER"
-            return 1
-        fi
-        DNS_UID="$(id -u "$DNS_USER")"
-        ip -4 rule add \
-            priority "$DNS_RULE_PRIORITY" \
-            uidrange "${DNS_UID}-${DNS_UID}" \
-            table "$ROUTE_TABLE"
-        log "DNS policy rule installed for UID ${DNS_UID}, priority ${DNS_RULE_PRIORITY}."
+    if ! id "$DNS_USER" >/dev/null 2>&1; then
+        log "DNS user does not exist: $DNS_USER"
+        return 1
     fi
+
+    DNS_UID="$(id -u "$DNS_USER")"
+    ip -4 rule add \
+        priority "$DNS_RULE_PRIORITY" \
+        uidrange "${DNS_UID}-${DNS_UID}" \
+        table "$ROUTE_TABLE"
+    log "DNS policy rule installed for UID ${DNS_UID}, priority ${DNS_RULE_PRIORITY}."
 
     for client_ip in "${VPN_CLIENTS[@]}"; do
         ip -4 rule add \
@@ -220,7 +218,7 @@ count_policy_rules() {
     local index=0
     local client_ip
 
-    if [[ "$DNS_ENABLED" == "true" ]] && id "$DNS_USER" >/dev/null 2>&1; then
+    if id "$DNS_USER" >/dev/null 2>&1; then
         local dns_uid
         dns_uid="$(id -u "$DNS_USER")"
         if policy_rule_present "$DNS_RULE_PRIORITY" "uidrange ${dns_uid}-${dns_uid}"; then
@@ -264,15 +262,14 @@ write_health() {
     nft_nat_present="$(bool_json nft list table ip tv_vpn_nat)"
     dns_service_active="$(bool_json systemctl is-active --quiet vpn-control-dns.service)"
 
-    if [[ "$DNS_ENABLED" == "true" ]] && id "$DNS_USER" >/dev/null 2>&1; then
+    if id "$DNS_USER" >/dev/null 2>&1; then
         local dns_uid
         dns_uid="$(id -u "$DNS_USER")"
         dns_rule_present="$(bool_json policy_rule_present "$DNS_RULE_PRIORITY" "uidrange ${dns_uid}-${dns_uid}")"
     fi
 
     policy_rules_actual="$(count_policy_rules)"
-    policy_rules_expected="${#VPN_CLIENTS[@]}"
-    [[ "$DNS_ENABLED" == "true" ]] && policy_rules_expected=$((policy_rules_expected + 1))
+    policy_rules_expected=$((${#VPN_CLIENTS[@]} + 1))
 
     if [[ "$forwarding_enabled" == "true" && "$fail_closed_present" == "true" && \
           "$nft_filter_present" == "true" && "$nft_nat_present" == "true" && \
