@@ -205,7 +205,7 @@ systemctl enable tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.
 systemctl reset-failed tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service 2>/dev/null || true
 systemctl restart tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
 
-nordvpn_as_user set autoconnect on "$COUNTRY"
+nordvpn_set_idempotent autoconnect on "$COUNTRY"
 nordvpn_as_user connect "$COUNTRY" || log "NordVPN is currently disconnected; managed devices remain fail-closed."
 
 HEALTH_READY=false
