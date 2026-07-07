@@ -127,7 +127,7 @@ rollback_update() {
     log "Rollback completed. Inspect: journalctl -u tv-vpn-gateway -u vpn-control-dns -u vpn-control-web -n 100"
     exit "$exit_code"
 }
-trap 'status=$?; rollback_update "$LINENO" "$status"' ERR
+trap 'rollback_update "$LINENO" "$?"' ERR
 
 for path in "${MANAGED_PATHS[@]}"; do
     if [[ -e "$path" ]]; then
