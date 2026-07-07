@@ -83,8 +83,14 @@ was_missing_before() {
 
 rollback_update() {
     local failed_line="$1"
+    local exit_code="$2"
 
-    [[ "$UPDATE_COMPLETE" == "true" || "$ROLLBACK_ACTIVE" == "true" ]] && return 0
+    trap - ERR
+
+    if [[ "$UPDATE_COMPLETE" == "true" || "$ROLLBACK_ACTIVE" == "true" ]]; then
+        exit "$exit_code"
+    fi
+
     ROLLBACK_ACTIVE=true
     set +e
 
@@ -101,14 +107,27 @@ rollback_update() {
         fi
     done
 
-    systemctl daemon-reload
-    systemctl restart tv-vpn-gateway.service 2>/dev/null
-    systemctl restart vpn-control-dns.service 2>/dev/null
-    systemctl restart vpn-control-web.service 2>/dev/null
+    if was_missing_before /etc/systemd/system/vpn-control-dns.service; then
+        rm -f /etc/systemd/system/multi-user.target.wants/vpn-control-dns.service
+    fi
 
-    log "Rollback attempted. Inspect: journalctl -u tv-vpn-gateway -u vpn-control-dns -u vpn-control-web -n 100"
+    systemctl daemon-reload
+    systemctl reset-failed tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service 2>/dev/null
+
+    if [[ -f /etc/systemd/system/tv-vpn-gateway.service ]]; then
+        systemctl restart tv-vpn-gateway.service 2>/dev/null
+    fi
+    if [[ -f /etc/systemd/system/vpn-control-dns.service ]]; then
+        systemctl restart vpn-control-dns.service 2>/dev/null
+    fi
+    if [[ -f /etc/systemd/system/vpn-control-web.service ]]; then
+        systemctl restart vpn-control-web.service 2>/dev/null
+    fi
+
+    log "Rollback completed. Inspect: journalctl -u tv-vpn-gateway -u vpn-control-dns -u vpn-control-web -n 100"
+    exit "$exit_code"
 }
-trap 'rollback_update "$LINENO"' ERR
+trap 'status=$?; rollback_update "$LINENO" "$status"' ERR
 
 for path in "${MANAGED_PATHS[@]}"; do
     if [[ -e "$path" ]]; then
@@ -183,26 +202,39 @@ if command -v systemd-analyze >/dev/null 2>&1; then
 fi
 
 systemctl enable tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
-systemctl restart tv-vpn-gateway.service
-systemctl restart vpn-control-dns.service
-systemctl restart vpn-control-web.service
+systemctl reset-failed tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service 2>/dev/null || true
+systemctl restart tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
 
 nordvpn_as_user set autoconnect on "$COUNTRY"
 nordvpn_as_user connect "$COUNTRY" || log "NordVPN is currently disconnected; managed devices remain fail-closed."
 
-sleep 8
-systemctl is-active --quiet tv-vpn-gateway.service
-systemctl is-active --quiet vpn-control-dns.service
-systemctl is-active --quiet vpn-control-web.service
-jq -e --arg version "$PROJECT_VERSION" '
-    .version == $version and
-    (.status == "healthy" or .status == "fail-closed") and
-    .fail_closed_present == true and
-    .nft_filter_present == true and
-    .nft_nat_present == true and
-    .dns_service_active == true and
-    .dns_rule_present == true
-' /run/vpn-control/gateway-health.json >/dev/null
+HEALTH_READY=false
+for _ in $(seq 1 20); do
+    if systemctl is-active --quiet tv-vpn-gateway.service && \
+       systemctl is-active --quiet vpn-control-dns.service && \
+       systemctl is-active --quiet vpn-control-web.service && \
+       [[ -s /run/vpn-control/gateway-health.json ]] && \
+       jq -e --arg version "$PROJECT_VERSION" '
+            .version == $version and
+            (.status == "healthy" or .status == "fail-closed") and
+            .fail_closed_present == true and
+            .nft_filter_present == true and
+            .nft_nat_present == true and
+            .dns_service_active == true and
+            .dns_rule_present == true
+       ' /run/vpn-control/gateway-health.json >/dev/null 2>&1; then
+        HEALTH_READY=true
+        break
+    fi
+    sleep 2
+done
+
+if [[ "$HEALTH_READY" != "true" ]]; then
+    journalctl -u tv-vpn-gateway.service -u vpn-control-dns.service -u vpn-control-web.service \
+        -n 100 --no-pager || true
+    log "The updated services did not reach a protected healthy state."
+    false
+fi
 
 UPDATE_COMPLETE=true
 trap - ERR
