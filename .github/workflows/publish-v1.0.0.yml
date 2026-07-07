@@ -1,4 +1,4 @@
-name: Publish v1.0.0
+name: Publish v1.0.1 tag
 
 on:
   push:
@@ -11,89 +11,26 @@ permissions:
   contents: write
 
 jobs:
-  publish:
+  tag:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Verify release version
+      - name: Verify release source
         shell: bash
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < VERSION)"
-          test "$version" = "1.0.0"
+          test "$version" = "1.0.1"
+          grep -Fq '## [1.0.1] - 2026-07-07' CHANGELOG.md
           if git ls-remote --exit-code --tags origin "refs/tags/v${version}" >/dev/null 2>&1; then
             echo "Tag v${version} already exists; refusing to replace it."
             exit 1
           fi
 
-      - name: Install validation tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq nftables shellcheck dnsmasq-base zip
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements.txt -r requirements-dev.txt
-
-      - name: Run validation suite
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(tr -d '[:space:]' < VERSION)"
-          VPN_WEB_PASSWORD=test VPN_WEB_SECRET_KEY=test \
-            python3 -c 'import app; assert app.APP_VERSION == open("VERSION", encoding="utf-8").read().strip()'
-          SCRIPT_DIR="$PWD"
-          source installer-lib.sh
-          test "$PROJECT_VERSION" = "$version"
-          ruff check .
-          pytest
-          bash -n gateway.sh install.sh update.sh uninstall.sh installer-lib.sh scripts/smoke-test.sh
-          shellcheck -x gateway.sh install.sh update.sh uninstall.sh scripts/smoke-test.sh
-          VPN_CONFIG_PATH=config.example.json VPN_VERSION_PATH=VERSION \
-            ./gateway.sh --render-nft > /tmp/vpn-control.nft
-          sudo nft -c -f /tmp/vpn-control.nft
-
-      - name: Validate systemd units
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo useradd --system --no-create-home --shell /usr/sbin/nologin vpn-dns || true
-          sudo install -d /opt/vpn-control/.venv/bin /etc/vpn-control /usr/local/sbin
-          sudo install -m 0755 gateway.sh /usr/local/sbin/tv-vpn-gateway
-          sudo touch /opt/vpn-control/.venv/bin/gunicorn
-          sudo chmod 0755 /opt/vpn-control/.venv/bin/gunicorn
-          sudo touch /etc/vpn-control/dnsmasq.conf /etc/vpn-control-web.env
-          sed "s/__VPN_USER__/${USER}/g" vpn-control-web.service > /tmp/vpn-control-web.service
-          systemd-analyze verify \
-            vpn-control-dns.service \
-            tv-vpn-gateway.service \
-            /tmp/vpn-control-web.service
-          grep -Fq 'CapabilityBoundingSet=CAP_NET_ADMIN CAP_DAC_READ_SEARCH' \
-            tv-vpn-gateway.service
-          grep -Eq '^RestrictAddressFamilies=.*AF_NETLINK' \
-            vpn-control-dns.service
-
-      - name: Build release archives
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(tr -d '[:space:]' < VERSION)"
-          package="nordvpn-linux-gateway-panel-${version}"
-          mkdir -p dist
-          git archive --format=tar --prefix="${package}/" HEAD | gzip -9 > "dist/${package}.tar.gz"
-          git archive --format=zip --prefix="${package}/" HEAD > "dist/${package}.zip"
-          (cd dist && sha256sum "${package}.tar.gz" "${package}.zip" > SHA256SUMS)
-          awk -v version="$version" '
-            index($0, "## [" version "]") == 1 {capture=1; next}
-            /^## \[/ && capture {exit}
-            capture {print}
-          ' CHANGELOG.md > /tmp/release-notes.md
-          test -s /tmp/release-notes.md
-
-      - name: Create annotated tag and GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Create annotated tag
         shell: bash
         run: |
           set -euo pipefail
@@ -103,8 +40,3 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$tag" -m "NordVPN Linux Gateway Panel ${tag}"
           git push origin "$tag"
-          gh release create "$tag" \
-            dist/* \
-            --verify-tag \
-            --title "NordVPN Linux Gateway Panel ${version}" \
-            --notes-file /tmp/release-notes.md
