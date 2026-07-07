@@ -48,11 +48,13 @@ nordvpn_as_user() {
     runuser -u "$VPN_USER" -- nordvpn "$@"
 }
 
-dns_query() {
+dns_probe() {
     local server="$1"
     local timeout_seconds="${2:-4}"
+    local query_name="${3:-example.com}"
+    local mode="${4:-answer}"
 
-    python3 - "$server" "$timeout_seconds" <<'PY'
+    python3 - "$server" "$timeout_seconds" "$query_name" "$mode" <<'PY'
 import random
 import socket
 import struct
@@ -60,10 +62,17 @@ import sys
 
 server = sys.argv[1]
 timeout = float(sys.argv[2])
+query_name = sys.argv[3].rstrip(".")
+mode = sys.argv[4]
+
+labels = query_name.split(".")
+if not labels or any(not label or len(label.encode("idna")) > 63 for label in labels):
+    raise SystemExit(2)
+
 transaction_id = random.randint(0, 65535)
 header = struct.pack("!HHHHHH", transaction_id, 0x0100, 1, 0, 0, 0)
 question = b"".join(
-    bytes([len(label)]) + label.encode("ascii") for label in "example.com".split(".")
+    bytes([len(label.encode("idna"))]) + label.encode("idna") for label in labels
 )
 question += b"\x00" + struct.pack("!HH", 1, 1)
 packet = header + question
@@ -74,9 +83,23 @@ sock.sendto(packet, (server, 53))
 response, _ = sock.recvfrom(4096)
 if len(response) < 12:
     raise SystemExit(1)
+
 response_id, flags, _, answers, _, _ = struct.unpack("!HHHHHH", response[:12])
-if response_id != transaction_id or not flags & 0x8000 or answers < 1:
+is_response = bool(flags & 0x8000)
+rcode = flags & 0x000F
+
+if response_id != transaction_id or not is_response:
     raise SystemExit(1)
+
+if mode == "response":
+    # Any syntactically valid DNS response, including NXDOMAIN, proves that
+    # the query reached a resolver. This is used for the uncached failover probe.
+    raise SystemExit(0)
+
+if mode == "answer" and rcode == 0 and answers >= 1:
+    raise SystemExit(0)
+
+raise SystemExit(1)
 PY
 }
 
@@ -88,7 +111,7 @@ restore_vpn() {
 }
 trap restore_vpn EXIT
 
-for command_name in awk curl grep ip jq nft python3 runuser sleep sysctl systemctl tr; do
+for command_name in awk curl date grep ip jq nft python3 runuser sleep sysctl systemctl tr; do
     command -v "$command_name" >/dev/null 2>&1 || {
         echo "Missing required command: $command_name" >&2
         exit 1
@@ -170,7 +193,7 @@ else
     fail "Gateway heartbeat is missing or degraded"
 fi
 
-check "Local DNS proxy resolves through gateway" dns_query "$LAN_IP" 5
+check "Local DNS proxy resolves through gateway" dns_probe "$LAN_IP" 5 example.com answer
 check "Web panel responds with authentication challenge" \
     sh -c "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 'http://${LAN_IP}:8080/')\" = 401"
 
@@ -179,14 +202,22 @@ if [[ "$WITH_FAILOVER" == "true" ]]; then
         ORIGINAL_CONNECTED=true
     fi
 
+    # Use unique names and accept any valid response, including NXDOMAIN. A
+    # fixed successful name such as example.com may be served from dnsmasq's
+    # cache after disconnect and would create a false fail-closed failure.
+    baseline_probe="vpn-control-before-$(date +%s%N)-$$.example.com"
+    blocked_probe="vpn-control-after-$(date +%s%N)-$$.example.com"
+    check "Uncached DNS probe reaches upstream before disconnect" \
+        dns_probe "$LAN_IP" 5 "$baseline_probe" response
+
     printf '\nRunning failover test: disconnecting NordVPN...\n'
     nordvpn_as_user disconnect >/dev/null
     sleep 8
 
-    if dns_query "$LAN_IP" 3 >/dev/null 2>&1; then
-        fail "DNS did not fail closed after VPN disconnect"
+    if dns_probe "$LAN_IP" 3 "$blocked_probe" response >/dev/null 2>&1; then
+        fail "Uncached DNS query received a response after VPN disconnect"
     else
-        pass "DNS fails closed after VPN disconnect"
+        pass "Uncached DNS query is blocked after VPN disconnect"
     fi
 
     check "Blackhole route remains after disconnect" \
@@ -204,7 +235,7 @@ if [[ "$WITH_FAILOVER" == "true" ]]; then
 
     check "NordVPN reconnects successfully" \
         sh -c "runuser -u '$VPN_USER' -- nordvpn status | grep -q '^Status: Connected'"
-    check "DNS recovers after reconnect" dns_query "$LAN_IP" 5
+    check "DNS recovers after reconnect" dns_probe "$LAN_IP" 5 example.com answer
     check "VPN default route is restored" \
         sh -c "ip -4 route show table '$ROUTE_TABLE' | grep -q '^default dev $VPN_IF'"
 fi
