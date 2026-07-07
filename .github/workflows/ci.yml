@@ -8,11 +8,48 @@ permissions:
   contents: read
 
 jobs:
-  syntax:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Python syntax
-        run: python3 -m py_compile app.py
+
+      - name: Install system validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq nftables shellcheck dnsmasq-base
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Python lint
+        run: ruff check .
+
+      - name: Python tests
+        run: pytest
+
       - name: Bash syntax
-        run: bash -n gateway.sh install.sh update.sh uninstall.sh
+        run: bash -n gateway.sh install.sh update.sh uninstall.sh installer-lib.sh
+
+      - name: ShellCheck
+        run: shellcheck -x gateway.sh install.sh update.sh uninstall.sh
+
+      - name: Render and validate nftables rules
+        run: |
+          VPN_CONFIG_PATH=config.example.json ./gateway.sh --render-nft > /tmp/vpn-control.nft
+          sudo nft -c -f /tmp/vpn-control.nft
+
+      - name: Validate systemd units
+        run: |
+          sudo useradd --system --no-create-home --shell /usr/sbin/nologin vpn-dns || true
+          sudo install -d /opt/vpn-control/.venv/bin /etc/vpn-control /usr/local/sbin
+          sudo install -m 0755 gateway.sh /usr/local/sbin/tv-vpn-gateway
+          sudo touch /opt/vpn-control/.venv/bin/gunicorn
+          sudo chmod 0755 /opt/vpn-control/.venv/bin/gunicorn
+          sudo touch /etc/vpn-control/dnsmasq.conf /etc/vpn-control-web.env
+          sed "s/__VPN_USER__/${USER}/g" vpn-control-web.service > /tmp/vpn-control-web.service
+          systemd-analyze verify \
+            vpn-control-dns.service \
+            tv-vpn-gateway.service \
+            /tmp/vpn-control-web.service

@@ -1,80 +1,50 @@
 # NordVPN Linux Gateway Panel
 
-A lightweight Ubuntu gateway and LAN-only web control panel for routing selected devices through NordVPN NordLynx.
+A lightweight Ubuntu gateway and LAN-only web panel for routing selected TVs, tablets, consoles, and other devices through NordVPN NordLynx.
 
-It is useful for TVs, tablets, consoles, and other devices that cannot run the NordVPN application directly.
+Current release: **0.3.0**
 
 ## Features
 
 - Add and remove managed devices by IPv4 address
 - Change the NordVPN exit country from a browser
-- Persist the selected country as the NordVPN auto-connect target
-- Reconnect to another server in the same country
 - Source-based policy routing for multiple devices
-- nftables masquerading
-- Fail-closed routing when the VPN tunnel is unavailable
-- systemd services for automatic startup
-- HTTP Basic Authentication and CSRF protection
-
-Supported menu countries currently include Greece, Bulgaria, Serbia, Romania, Italy, Austria, Germany, Spain, France, the Netherlands, the United Kingdom, the United States, South Korea, and Japan.
+- nftables forwarding, NAT, and fail-closed protection
+- Local dnsmasq proxy with DNS traffic forced through the VPN routing table
+- Gateway heartbeat and health visibility in the web panel
+- systemd services with defensive hardening
+- HTTP Basic Authentication, CSRF protection, and atomic configuration writes
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    D[TV / tablet / console] -->|Gateway: Ubuntu VM| V[Ubuntu VPN gateway]
-    V -->|Policy routing + nftables| N[nordlynx]
+    D[Managed device] -->|Gateway and DNS = Ubuntu VM| V[Ubuntu gateway]
+    V -->|Policy routing| R[Routing table 200]
+    V -->|Local DNS| DNS[dnsmasq]
+    R -->|Fail-closed| N[nordlynx]
+    DNS -->|UID policy rule| N
     N --> S[NordVPN server]
     S --> I[Internet]
 ```
 
 ## Requirements
 
-### Ubuntu gateway host
+### Ubuntu gateway
 
-The gateway can run on a physical Ubuntu machine or on a virtual machine. The intended deployment is a small, always-on Ubuntu Server instance.
-
-Recommended resources for a few TVs, tablets, or streaming devices:
+Recommended resources:
 
 ```text
-CPU:      2 virtual CPUs
+CPU:      2 vCPU
 Memory:   2 GB RAM
 Swap:     1 GB
-Storage:  10 GB free disk space
-Network:  1 Ethernet or virtual network adapter
+Storage:  10 GB free
+Network:  1 bridged/external LAN adapter
 ```
 
-The application itself uses very few resources. VPN encryption throughput depends mainly on the host CPU, the Internet connection, and the selected NordVPN server.
+The gateway requires Ubuntu Server with `systemd`, `bash`, `apt`, `sudo`, Linux policy routing, nftables, Python 3, and a fixed IPv4 address or DHCP reservation on the same LAN as the managed devices.
 
-The operating system must provide:
-
-- Ubuntu Server with `systemd`, `bash`, `apt`, and `sudo`
-- IPv4 forwarding support
-- Linux policy routing through `ip rule` and custom routing tables
-- nftables support for forwarding, filtering, and source NAT
-- Python 3 with virtual-environment support
-
-The installer installs the required Ubuntu packages, including Python, `jq`, `nftables`, and supporting utilities.
-
-### Virtual-machine networking
-
-When the gateway runs as a VM, its network adapter must connect directly to the same LAN as the managed devices.
-
-Examples:
-
-- Hyper-V: use an **External Virtual Switch**
-- VMware: use **Bridged Networking**
-- VirtualBox: use a **Bridged Adapter**
-
-A NAT-only or host-only virtual network is not suitable because TVs and other LAN devices must be able to reach the Ubuntu VM directly.
-
-The VM must have:
-
-- A fixed IPv4 address or a permanent DHCP reservation
-- An address in the same IPv4 subnet as the managed devices
-- A working default route through the normal LAN router
-- Internet access before NordVPN is configured
-- A LAN interface name that can be detected by the installer, such as `eth0`, `ens18`, or `enp0s3`
+For virtualization, use an **External Virtual Switch** in Hyper-V, **Bridged Networking** in VMware, or a **Bridged Adapter** in VirtualBox. NAT-only and host-only networks are not suitable.
 
 Example:
 
@@ -85,98 +55,81 @@ LAN subnet:       192.168.1.0/24
 Web panel:        http://192.168.1.2:8080
 ```
 
-Port `8080` must be unused on the Ubuntu host. Do not create an Internet-facing port-forward for this port.
-
 ### NordVPN account and Linux client
 
-Before installing this project, the official NordVPN Linux CLI must already be installed and authenticated.
+Install and authenticate the official NordVPN Linux CLI before running this project:
 
-Required state:
+```bash
+nordvpn login
+```
 
-- An active NordVPN account
-- NordVPN Linux CLI installed
-- Successful `nordvpn login`
-- NordLynx selected as the VPN technology
-- The Linux user running the web service added to the `nordvpn` group
-- A successful test connection to at least one country
+For a headless server:
 
-Recommended verification:
+```bash
+nordvpn login --token
+```
+
+The project does not require a raw WireGuard private key, manual NordLynx configuration, or OpenVPN service credentials. It uses the authenticated local NordVPN CLI session. See [NordVPN authentication and secret handling](docs/nordvpn-authentication.md).
+
+### Required NordVPN settings
+
+The installer configures these settings automatically:
+
+| Setting | Required value | Reason |
+|---|---|---|
+| Technology | `NORDLYNX` | Provides the `nordlynx` tunnel |
+| Routing | `on` | Keeps official client routing active |
+| Firewall | `on` | Retains NordVPN client firewall protection |
+| Kill Switch | `off` | This project provides per-device fail-closed protection |
+| LAN Discovery | `off` | A precise LAN subnet allowlist is used instead |
+| Allowlisted subnet | Exact LAN subnet | Preserves SSH, DNS, and web-panel LAN access |
+| Auto-connect | `on <country>` | Restores the selected country after reboot |
+
+The exact subnet is added **before** LAN Discovery is disabled, preventing an active SSH session from being locked out:
+
+```bash
+nordvpn allowlist add subnet 192.168.1.0/24
+nordvpn set technology nordlynx
+nordvpn set routing on
+nordvpn set firewall on
+nordvpn set killswitch off
+nordvpn set lan-discovery off
+```
+
+### Managed-device configuration
+
+Each managed device needs:
+
+```text
+IPv4 address:  Fixed/reserved address in the LAN subnet
+Subnet mask:   Usually 255.255.255.0
+Router:        Ubuntu gateway IPv4 address
+DNS:           Ubuntu gateway IPv4 address
+IPv6:          Disabled unless equivalent IPv6 VPN routing exists
+```
+
+Example:
+
+```text
+IPv4 address:  192.168.1.50
+Router:        192.168.1.2
+DNS:           192.168.1.2
+```
+
+The local dnsmasq proxy runs as a dedicated user. Its upstream DNS traffic is selected by a UID policy rule and sent through routing table `200`. If `nordlynx` is unavailable, the table's blackhole default prevents fallback to the normal router. See [Fail-closed DNS design](docs/dns.md).
+
+## Pre-installation checks
 
 ```bash
 nordvpn settings
 nordvpn status
-ip -4 address show nordlynx
-```
-
-NordVPN should report `NORDLYNX` as the current technology, and the `nordlynx` interface should appear after connection.
-
-### Router and LAN requirements
-
-The LAN router should support DHCP reservations or another method for keeping device IPv4 addresses stable.
-
-No router-wide static route is required. Each managed device is configured to use the Ubuntu VM as its own IPv4 default gateway.
-
-The router and LAN must allow direct communication between:
-
-```text
-Managed device <-> Ubuntu gateway <-> LAN router
-```
-
-Client isolation or guest-network isolation must not block access from the managed device to the Ubuntu gateway.
-
-### Managed-device requirements
-
-Each TV, tablet, console, or other managed device needs:
-
-- A fixed IPv4 address or DHCP reservation
-- An IPv4 address in the same subnet as the Ubuntu gateway
-- The Ubuntu gateway IPv4 address configured as its router/default gateway
-- A working DNS server, such as NordVPN DNS
-- IPv6 disabled or separately routed and filtered
-
-Example device configuration:
-
-```text
-IPv4 address:  192.168.1.50
-Subnet mask:   255.255.255.0
-Router:        192.168.1.2
-DNS:           103.86.96.100
-Alternative:   103.86.99.100
-```
-
-IPv6 must be disabled on the managed device unless equivalent IPv6 VPN routing is implemented. Otherwise, a device may bypass the IPv4-only gateway.
-
-### Administrative access
-
-Installation requires:
-
-- A Linux user with `sudo` privileges
-- SSH or local console access to the Ubuntu gateway
-- Permission to install packages and systemd services
-- Permission to manage routes, nftables, and IPv4 forwarding
-
-The web panel is intended for use only from a trusted private LAN.
-
-### Pre-installation checks
-
-Run these commands before installation:
-
-```bash
-nordvpn status
 ip -4 -br address
 ip -4 route
 systemctl is-active nordvpnd
-sudo nft list ruleset
-sudo ss -ltn | grep ':8080' || true
+sudo ss -ltnup | grep -E ':(53|8080)\b' || true
 ```
 
-Confirm that:
-
-- NordVPN can connect successfully
-- The Ubuntu gateway has the expected fixed LAN address
-- The default route points to the normal LAN router
-- `nordvpnd` is active
-- Port `8080` is not already in use
+Confirm that NordVPN is authenticated, the VM has its expected fixed address, `nordvpnd` is active, and ports `53` on the gateway LAN address and `8080` are available.
 
 ## Installation
 
@@ -186,7 +139,7 @@ cd nordvpn-linux-gateway-panel
 sudo ./install.sh
 ```
 
-The installer detects the default LAN interface, the gateway VM IPv4 address, and the connected subnet. Override them when necessary:
+Optional overrides:
 
 ```bash
 sudo VPN_USER="$USER" \
@@ -200,24 +153,7 @@ sudo VPN_USER="$USER" \
      ./install.sh
 ```
 
-Open the panel at:
-
-```text
-http://GATEWAY-IP:8080
-```
-
-## Managed device configuration
-
-For each device added to the panel, configure:
-
-```text
-IPv4 address: a reserved address in the LAN subnet
-Subnet mask:  according to the LAN, commonly 255.255.255.0
-Router:       IPv4 address of the Ubuntu gateway
-DNS:          103.86.96.100 or 103.86.99.100
-```
-
-Reserve the device address in the router. Disable IPv6 on the client, or implement equivalent IPv6 routing and filtering, so it cannot bypass the IPv4 VPN gateway.
+Open `http://GATEWAY-IP:8080`.
 
 ## Updating
 
@@ -226,38 +162,76 @@ git pull
 sudo ./update.sh
 ```
 
-Runtime configuration and web credentials are preserved.
+The updater refreshes the application, validation code, dependencies, gateway script, all systemd units, dnsmasq configuration, and runtime schema. It runs `systemctl daemon-reload`, validates the units, restarts the services, and keeps only the five newest backups per managed file.
+
+### Upgrade from an earlier version
+
+Version `0.3.0` adds the DNS proxy. After updating, change every managed device to:
+
+```text
+DNS = Ubuntu gateway IPv4 address
+```
 
 ## Verification
 
 ```bash
+sudo systemctl status vpn-control-dns.service --no-pager
 sudo systemctl status tv-vpn-gateway.service --no-pager
 sudo systemctl status vpn-control-web.service --no-pager
 ip -4 rule show
 ip -4 route show table 200
 sudo nft list table inet tv_vpn
 sudo nft list table ip tv_vpn_nat
+cat /run/vpn-control/gateway-health.json
 ```
 
-Traffic inspection:
+DNS checks:
 
 ```bash
-sudo tcpdump -ni eth0 host CLIENT_IP
-sudo tcpdump -ni nordlynx
+nslookup example.com GATEWAY-IP
+sudo tcpdump -ni eth0 'port 53'
+sudo tcpdump -ni nordlynx 'port 53'
 ```
 
-## Runtime files
+Disconnect NordVPN and repeat the lookup. It should fail instead of falling back to the normal LAN resolver.
 
-These files contain local state or secrets and must not be committed:
+## Health model
+
+The gateway writes an atomic heartbeat to `/run/vpn-control/gateway-health.json`. The panel reports heartbeat freshness, NordLynx availability, policy-rule counts, the blackhole route, nftables filter/NAT state, and DNS proxy protection. A disconnected tunnel with all guards intact is shown as **Fail-closed**.
+
+## Uninstall modes
+
+```bash
+sudo ./uninstall.sh --panel-only
+sudo ./uninstall.sh --all
+sudo ./uninstall.sh --purge
+```
+
+`--panel-only` keeps routing and DNS. `--all` removes services, rules, routes, and nftables state while preserving runtime configuration. `--purge` also removes runtime state and installer-created memberships/users where applicable.
+
+## Development and CI
+
+```bash
+python3 -m pip install -r requirements.txt -r requirements-dev.txt
+ruff check .
+pytest
+shellcheck -x gateway.sh install.sh update.sh uninstall.sh
+bash -n gateway.sh install.sh update.sh uninstall.sh installer-lib.sh
+```
+
+CI also validates the rendered nftables ruleset with `nft -c -f` and verifies the systemd units.
+
+## Security
+
+Never commit:
 
 ```text
 /etc/vpn-control-web.env
 /var/lib/vpn-control/config.json
+/var/lib/vpn-control/install-state.json
 ```
 
-## Security
-
-The panel is designed for a trusted LAN. Do not expose its HTTP port to the Internet. HTTP Basic Authentication does not provide transport encryption; place the application behind a TLS reverse proxy if the network is not trusted.
+The panel is intended for a trusted private LAN. Do not expose port `8080` to the Internet. HTTP Basic Authentication does not encrypt credentials; use a TLS reverse proxy when the LAN is not trusted.
 
 ## Disclaimer
 

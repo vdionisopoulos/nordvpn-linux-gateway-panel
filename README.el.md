@@ -1,165 +1,91 @@
 # NordVPN Linux Gateway Panel
 
-Μικρό Ubuntu gateway και web panel για τη δρομολόγηση επιλεγμένων συσκευών LAN μέσω NordVPN NordLynx.
+Ubuntu gateway και LAN-only web panel για δρομολόγηση επιλεγμένων τηλεοράσεων, tablets, κονσολών και άλλων συσκευών μέσω NordVPN NordLynx.
 
-## Λειτουργίες
+Τρέχουσα έκδοση: **0.3.0**
 
-- Προσθήκη και αφαίρεση συσκευών με IPv4
-- Αλλαγή χώρας εξόδου από browser
-- Αποθήκευση χώρας ως στόχου auto-connect
-- Reconnect σε άλλον server της ίδιας χώρας
+## Βασικές λειτουργίες
+
+- Προσθήκη και αφαίρεση managed συσκευών με IPv4
+- Αλλαγή χώρας NordVPN από browser
 - Policy routing ανά συσκευή
-- NAT με nftables
-- Fail-closed λειτουργία όταν πέσει το VPN
+- nftables NAT και fail-closed προστασία
+- Τοπικό dnsmasq proxy με τα upstream DNS queries υποχρεωτικά μέσω VPN
+- Gateway heartbeat και health status στο web panel
 - Αυτόματη εκκίνηση μέσω systemd
 
-## Απαιτήσεις
-
-### Ubuntu gateway
-
-Το gateway μπορεί να εγκατασταθεί σε φυσικό Ubuntu υπολογιστή ή σε virtual machine. Η προτεινόμενη χρήση είναι ένα μικρό Ubuntu Server που παραμένει συνεχώς ενεργό.
-
-Προτεινόμενοι πόροι για λίγες τηλεοράσεις, tablets ή άλλες συσκευές streaming:
+## Προτεινόμενοι πόροι Ubuntu VM
 
 ```text
 CPU:      2 vCPU
-Μνήμη:    2 GB RAM
+RAM:      2 GB
 Swap:     1 GB
-Δίσκος:   10 GB ελεύθερος χώρος
-Δίκτυο:   1 φυσικό ή virtual network adapter
+Δίσκος:   10 GB ελεύθερα
+Δίκτυο:   1 External/Bridged network adapter
 ```
 
-Η εφαρμογή χρησιμοποιεί ελάχιστους πόρους. Η πραγματική απόδοση του VPN εξαρτάται κυρίως από τον επεξεργαστή του host, την ταχύτητα της σύνδεσης Internet και τον NordVPN server που έχει επιλεγεί.
+Σε Hyper-V χρησιμοποίησε **External Virtual Switch**. Η VM πρέπει να βρίσκεται στο ίδιο LAN με τις managed συσκευές και να έχει σταθερή IPv4 ή DHCP reservation.
 
-Το λειτουργικό σύστημα πρέπει να διαθέτει:
+## NordVPN authentication
 
-- Ubuntu Server με `systemd`, `bash`, `apt` και `sudo`
-- Υποστήριξη IPv4 forwarding
-- Policy routing μέσω `ip rule` και custom routing tables
-- nftables για forwarding, filtering και source NAT
-- Python 3 και υποστήριξη virtual environments
+Απαιτείται εγκατεστημένο και authenticated NordVPN Linux CLI:
 
-Ο installer εγκαθιστά αυτόματα τα απαιτούμενα Ubuntu packages, όπως Python, `jq`, `nftables` και τα βοηθητικά εργαλεία.
+```bash
+nordvpn login
+```
 
-### Δικτύωση virtual machine
+Για headless server:
 
-Αν το gateway λειτουργεί ως VM, ο network adapter πρέπει να συνδέεται απευθείας στο ίδιο LAN με τις συσκευές που θα χρησιμοποιούν το VPN.
+```bash
+nordvpn login --token
+```
 
-Παραδείγματα:
+Το project δεν χρειάζεται WireGuard private key ή χειροκίνητο NordLynx configuration. Χρησιμοποιεί την υπάρχουσα authenticated συνεδρία του επίσημου NordVPN client.
 
-- Hyper-V: **External Virtual Switch**
-- VMware: **Bridged Networking**
-- VirtualBox: **Bridged Adapter**
+## Απαιτούμενα NordVPN settings
 
-Ένα NAT-only ή host-only virtual network δεν είναι κατάλληλο, επειδή οι τηλεοράσεις και οι υπόλοιπες συσκευές του LAN πρέπει να μπορούν να επικοινωνούν απευθείας με την Ubuntu VM.
+Ο installer τα ρυθμίζει αυτόματα:
 
-Η VM πρέπει να έχει:
+| Setting | Τιμή |
+|---|---|
+| Technology | `NORDLYNX` |
+| Routing | `on` |
+| Firewall | `on` |
+| Kill Switch | `off` |
+| LAN Discovery | `off` |
+| Allowlist | Το ακριβές LAN subnet |
+| Auto-connect | `on <country>` |
 
-- Σταθερή IPv4 ή μόνιμο DHCP reservation
-- IPv4 στο ίδιο subnet με τις managed συσκευές
-- Κανονικό default route προς το οικιακό router
-- Πρόσβαση στο Internet πριν ρυθμιστεί το NordVPN
-- Αναγνωρίσιμο LAN interface, όπως `eth0`, `ens18` ή `enp0s3`
+Το LAN subnet προστίθεται στην allowlist πριν απενεργοποιηθεί το LAN Discovery, ώστε να μη χαθεί η πρόσβαση SSH ή στο panel:
+
+```bash
+nordvpn allowlist add subnet 192.168.1.0/24
+nordvpn set technology nordlynx
+nordvpn set routing on
+nordvpn set firewall on
+nordvpn set killswitch off
+nordvpn set lan-discovery off
+```
+
+## Ρύθμιση managed συσκευής
+
+```text
+IPv4:    Σταθερή/reserved IP στο LAN
+Mask:    Συνήθως 255.255.255.0
+Router:  IPv4 της Ubuntu VM
+DNS:     IPv4 της Ubuntu VM
+IPv6:    Off, εκτός αν έχει υλοποιηθεί αντίστοιχο IPv6 VPN routing
+```
 
 Παράδειγμα:
 
 ```text
-LAN router:       192.168.1.1
-Ubuntu gateway:   192.168.1.2
-LAN subnet:       192.168.1.0/24
-Web panel:        http://192.168.1.2:8080
+Device IP:  192.168.1.50
+Router:     192.168.1.2
+DNS:        192.168.1.2
 ```
 
-Η θύρα `8080` πρέπει να είναι ελεύθερη στην Ubuntu VM. Δεν πρέπει να δημιουργηθεί port forwarding από το Internet προς αυτή τη θύρα.
-
-### NordVPN account και Linux client
-
-Πριν την εγκατάσταση του project πρέπει να έχει εγκατασταθεί και να έχει γίνει authentication στο επίσημο NordVPN Linux CLI.
-
-Απαιτούνται:
-
-- Ενεργός λογαριασμός NordVPN
-- Εγκατεστημένο NordVPN Linux CLI
-- Επιτυχές `nordvpn login`
-- Επιλεγμένο NordLynx ως VPN technology
-- Ο Linux χρήστης του web service να ανήκει στο group `nordvpn`
-- Επιτυχής δοκιμαστική σύνδεση σε τουλάχιστον μία χώρα
-
-Προτεινόμενος έλεγχος:
-
-```bash
-nordvpn settings
-nordvpn status
-ip -4 address show nordlynx
-```
-
-Το NordVPN πρέπει να εμφανίζει `NORDLYNX` ως ενεργή τεχνολογία και το interface `nordlynx` πρέπει να εμφανίζεται μετά τη σύνδεση.
-
-### Απαιτήσεις router και LAN
-
-Το LAN router πρέπει να υποστηρίζει DHCP reservations ή άλλον τρόπο ώστε οι IP των συσκευών να παραμένουν σταθερές.
-
-Δεν απαιτείται router-wide static route. Κάθε managed συσκευή ρυθμίζεται ξεχωριστά ώστε να χρησιμοποιεί την Ubuntu VM ως IPv4 default gateway.
-
-Το LAN πρέπει να επιτρέπει απευθείας επικοινωνία μεταξύ:
-
-```text
-Managed συσκευή <-> Ubuntu gateway <-> LAN router
-```
-
-Guest Wi-Fi isolation ή client isolation δεν πρέπει να εμποδίζει την επικοινωνία της συσκευής με την Ubuntu VM.
-
-### Απαιτήσεις managed συσκευών
-
-Κάθε τηλεόραση, tablet, κονσόλα ή άλλη συσκευή χρειάζεται:
-
-- Σταθερή IPv4 ή DHCP reservation
-- IPv4 στο ίδιο subnet με την Ubuntu VM
-- Την IPv4 της Ubuntu VM ως Router/Default Gateway
-- Λειτουργικό DNS, όπως το NordVPN DNS
-- Απενεργοποιημένο IPv6 ή αντίστοιχο IPv6 routing/filtering
-
-Παράδειγμα ρύθμισης συσκευής:
-
-```text
-IPv4 address:  192.168.1.50
-Subnet mask:   255.255.255.0
-Router:        192.168.1.2
-DNS:           103.86.96.100
-Εναλλακτικό:   103.86.99.100
-```
-
-Το IPv6 πρέπει να απενεργοποιηθεί στη managed συσκευή, εκτός αν έχει υλοποιηθεί αντίστοιχη IPv6 δρομολόγηση μέσω VPN. Διαφορετικά, η συσκευή μπορεί να παρακάμψει το IPv4 gateway.
-
-### Διαχειριστική πρόσβαση
-
-Για την εγκατάσταση απαιτούνται:
-
-- Linux χρήστης με δικαιώματα `sudo`
-- SSH ή τοπική console πρόσβαση στην Ubuntu VM
-- Δικαίωμα εγκατάστασης packages και systemd services
-- Δικαίωμα διαχείρισης routes, nftables και IPv4 forwarding
-
-Το web panel προορίζεται αποκλειστικά για χρήση μέσα σε έμπιστο ιδιωτικό LAN.
-
-### Έλεγχοι πριν την εγκατάσταση
-
-```bash
-nordvpn status
-ip -4 -br address
-ip -4 route
-systemctl is-active nordvpnd
-sudo nft list ruleset
-sudo ss -ltn | grep ':8080' || true
-```
-
-Επιβεβαίωσε ότι:
-
-- Το NordVPN συνδέεται επιτυχώς
-- Η Ubuntu VM έχει τη σωστή σταθερή LAN IP
-- Το default route δείχνει στο κανονικό LAN router
-- Το `nordvpnd` είναι ενεργό
-- Η θύρα `8080` δεν χρησιμοποιείται ήδη
+Το dnsmasq ακούει στη LAN IP της VM. Τα upstream DNS queries εκτελούνται από dedicated χρήστη και δρομολογούνται μέσω του fail-closed table `200`. Αν πέσει το `nordlynx`, τα DNS queries δεν επιστρέφουν στον κανονικό router.
 
 ## Εγκατάσταση
 
@@ -169,27 +95,60 @@ cd nordvpn-linux-gateway-panel
 sudo ./install.sh
 ```
 
-Το panel ανοίγει στη διεύθυνση:
+Panel:
 
 ```text
 http://IP-ΤΗΣ-VM:8080
 ```
 
-## Ρύθμιση συσκευής
+## Update
 
-Κάθε managed συσκευή χρειάζεται:
-
-```text
-Σταθερή IPv4
-Gateway/Router = IP της Ubuntu VM
-DNS = 103.86.96.100 ή 103.86.99.100
+```bash
+git pull
+sudo ./update.sh
 ```
 
-Απενεργοποίησε το IPv6 στη συσκευή ή υλοποίησε αντίστοιχο IPv6 routing/filtering, ώστε να μην παρακάμπτει το VPN.
+Η έκδοση `0.3.0` ενημερώνει και τα systemd units, εκτελεί `daemon-reload`, εγκαθιστά το DNS proxy και διατηρεί μόνο τα πέντε νεότερα backups.
+
+Μετά την αναβάθμιση, άλλαξε το DNS όλων των managed συσκευών ώστε να δείχνει στην IP της Ubuntu VM.
+
+## Έλεγχος
+
+```bash
+sudo systemctl status vpn-control-dns.service --no-pager
+sudo systemctl status tv-vpn-gateway.service --no-pager
+sudo systemctl status vpn-control-web.service --no-pager
+ip -4 rule show
+ip -4 route show table 200
+sudo nft list table inet tv_vpn
+cat /run/vpn-control/gateway-health.json
+```
+
+DNS verification:
+
+```bash
+nslookup example.com IP-ΤΗΣ-VM
+sudo tcpdump -ni eth0 'port 53'
+sudo tcpdump -ni nordlynx 'port 53'
+```
+
+## Uninstall
+
+```bash
+sudo ./uninstall.sh --panel-only
+sudo ./uninstall.sh --all
+sudo ./uninstall.sh --purge
+```
 
 ## Ασφάλεια
 
-Μην εκθέσεις τη θύρα του panel στο Internet και μην κάνεις port forwarding από το router. Τα credentials του HTTP Basic Authentication δεν κρυπτογραφούνται χωρίς TLS.
+Μην κάνεις port forwarding της θύρας `8080` στο Internet. Τα πραγματικά credentials και runtime configuration παραμένουν μόνο τοπικά στα:
+
+```text
+/etc/vpn-control-web.env
+/var/lib/vpn-control/config.json
+/var/lib/vpn-control/install-state.json
+```
 
 ## Άδεια
 
