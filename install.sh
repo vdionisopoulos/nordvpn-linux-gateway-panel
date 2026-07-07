@@ -52,6 +52,7 @@ ensure_dns_user
 
 install -d -m 0755 /opt/vpn-control
 install -m 0644 "$SCRIPT_DIR/app.py" /opt/vpn-control/app.py
+install -m 0644 "$SCRIPT_DIR/i18n.py" /opt/vpn-control/i18n.py
 install -m 0644 "$SCRIPT_DIR/validation.py" /opt/vpn-control/validation.py
 install -m 0644 "$SCRIPT_DIR/requirements.txt" /opt/vpn-control/requirements.txt
 install -m 0644 "$SCRIPT_DIR/VERSION" /opt/vpn-control/VERSION
