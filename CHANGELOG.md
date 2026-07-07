@@ -30,6 +30,8 @@ First stable release of the NordVPN Linux Gateway Panel.
 - Rollback now terminates the failed update instead of allowing a misleading success message
 - Removed stale DNS enablement links when rolling back an upgrade from a version without the DNS service
 - Prevented DNS restart jobs from being canceled during ordered service startup
+- Allowed the hardened gateway service to read the protected runtime configuration without restoring broad root capabilities
+- Allowed dnsmasq to open the required netlink socket while retaining systemd address-family restrictions
 - Centralized release-version handling to prevent application, installer, and heartbeat version drift
 
 ## [0.3.0] - 2026-07-07
