@@ -2,8 +2,8 @@
 Description=VPN Control DNS Proxy
 Documentation=man:dnsmasq(8)
 Wants=network-online.target
-After=network-online.target
-Before=tv-vpn-gateway.service
+BindsTo=tv-vpn-gateway.service
+After=network-online.target tv-vpn-gateway.service
 
 [Service]
 Type=simple
