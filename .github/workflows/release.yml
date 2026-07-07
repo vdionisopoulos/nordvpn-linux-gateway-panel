@@ -16,22 +16,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify tag and version
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(cat VERSION)"
-          test "$GITHUB_REF_NAME" = "v${version}"
-          grep -Fq "APP_VERSION = \"${version}\"" app.py
-          grep -Fq "PROJECT_VERSION=\"${version}\"" installer-lib.sh
-          grep -Fq "--arg version \"${version}\"" gateway.sh
-
       - name: Install validation tools
         run: |
           sudo apt-get update
           sudo apt-get install -y jq nftables shellcheck dnsmasq-base zip
           python3 -m pip install --upgrade pip
           python3 -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Verify tag and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          test -n "$version"
+          test "$GITHUB_REF_NAME" = "v${version}"
+          VPN_WEB_PASSWORD=test VPN_WEB_SECRET_KEY=test \
+            python3 -c 'import app; assert app.APP_VERSION == open("VERSION", encoding="utf-8").read().strip()'
+          SCRIPT_DIR="$PWD"
+          source installer-lib.sh
+          test "$PROJECT_VERSION" = "$version"
 
       - name: Run validation suite
         shell: bash
@@ -41,7 +44,8 @@ jobs:
           pytest
           bash -n gateway.sh install.sh update.sh uninstall.sh installer-lib.sh scripts/smoke-test.sh
           shellcheck -x gateway.sh install.sh update.sh uninstall.sh scripts/smoke-test.sh
-          VPN_CONFIG_PATH=config.example.json ./gateway.sh --render-nft > /tmp/vpn-control.nft
+          VPN_CONFIG_PATH=config.example.json VPN_VERSION_PATH=VERSION \
+            ./gateway.sh --render-nft > /tmp/vpn-control.nft
           sudo nft -c -f /tmp/vpn-control.nft
 
       - name: Validate systemd units
@@ -64,14 +68,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="$(cat VERSION)"
+          version="$(tr -d '[:space:]' < VERSION)"
           package="nordvpn-linux-gateway-panel-${version}"
           mkdir -p dist
           git archive --format=tar --prefix="${package}/" HEAD | gzip -9 > "dist/${package}.tar.gz"
           git archive --format=zip --prefix="${package}/" HEAD > "dist/${package}.zip"
           (cd dist && sha256sum "${package}.tar.gz" "${package}.zip" > SHA256SUMS)
-          awk '
-            /^## \[1\.0\.0\]/ {capture=1; next}
+          awk -v version="$version" '
+            index($0, "## [" version "]") == 1 {capture=1; next}
             /^## \[/ && capture {exit}
             capture {print}
           ' CHANGELOG.md > /tmp/release-notes.md
@@ -83,7 +87,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="$(cat VERSION)"
+          version="$(tr -d '[:space:]' < VERSION)"
           gh release create "$GITHUB_REF_NAME" \
             dist/* \
             --verify-tag \
