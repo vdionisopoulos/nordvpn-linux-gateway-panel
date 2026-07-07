@@ -243,7 +243,7 @@ migrate_runtime_config() {
              .route_table //= 200 |
              .rule_priority //= 10000 |
              .check_interval //= 5 |
-             .dns_enabled = true |
+             del(.dns_enabled) |
              .dns_user = "vpn-dns" |
              .dns_rule_priority //= 9999 |
              .dns_upstreams //= ["103.86.96.100", "103.86.99.100"]' \
@@ -267,7 +267,6 @@ migrate_runtime_config() {
                 route_table: 200,
                 rule_priority: 10000,
                 check_interval: 5,
-                dns_enabled: true,
                 dns_user: "vpn-dns",
                 dns_rule_priority: 9999,
                 dns_upstreams: ["103.86.96.100", "103.86.99.100"]
