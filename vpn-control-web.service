@@ -1,7 +1,7 @@
 [Unit]
 Description=VPN Control Web Panel
-Wants=network-online.target tv-vpn-gateway.service
-After=network-online.target nordvpnd.service tv-vpn-gateway.service
+Wants=network-online.target tv-vpn-gateway.service vpn-control-dns.service
+After=network-online.target nordvpnd.service tv-vpn-gateway.service vpn-control-dns.service
 
 [Service]
 Type=simple
@@ -28,7 +28,7 @@ MemoryDenyWriteExecute=yes
 RestrictRealtime=yes
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 ReadWritePaths=/var/lib/vpn-control
-ReadOnlyPaths=/run/vpn-control
+ReadOnlyPaths=-/run/vpn-control
 
 [Install]
 WantedBy=multi-user.target
