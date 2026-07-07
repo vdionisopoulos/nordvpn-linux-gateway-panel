@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 CONFIG_FILE="${VPN_CONFIG_PATH:-/var/lib/vpn-control/config.json}"
 STATE_FILE="/var/lib/vpn-control/install-state.json"
+VERSION_FILE="${VPN_VERSION_PATH:-/opt/vpn-control/VERSION}"
 WITH_FAILOVER=false
 ORIGINAL_CONNECTED=false
 VPN_USER=""
@@ -61,7 +62,9 @@ server = sys.argv[1]
 timeout = float(sys.argv[2])
 transaction_id = random.randint(0, 65535)
 header = struct.pack("!HHHHHH", transaction_id, 0x0100, 1, 0, 0, 0)
-question = b"".join(bytes([len(label)]) + label.encode("ascii") for label in "example.com".split("."))
+question = b"".join(
+    bytes([len(label)]) + label.encode("ascii") for label in "example.com".split(".")
+)
 question += b"\x00" + struct.pack("!HH", 1, 1)
 packet = header + question
 
@@ -85,7 +88,7 @@ restore_vpn() {
 }
 trap restore_vpn EXIT
 
-for command_name in ip jq nft python3 systemctl runuser curl; do
+for command_name in awk curl grep ip jq nft python3 runuser sleep sysctl systemctl tr; do
     command -v "$command_name" >/dev/null 2>&1 || {
         echo "Missing required command: $command_name" >&2
         exit 1
@@ -96,12 +99,21 @@ done
     echo "Runtime configuration not readable: $CONFIG_FILE" >&2
     exit 1
 }
+[[ -r "$VERSION_FILE" ]] || {
+    echo "Installed VERSION file not readable: $VERSION_FILE" >&2
+    exit 1
+}
+
+EXPECTED_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
+[[ -n "$EXPECTED_VERSION" ]] || {
+    echo "Installed VERSION file is empty: $VERSION_FILE" >&2
+    exit 1
+}
 
 LAN_IP="$(jq -r '.lan_ip' "$CONFIG_FILE")"
 LAN_IF="$(jq -r '.lan_if' "$CONFIG_FILE")"
 VPN_IF="$(jq -r '.vpn_if // "nordlynx"' "$CONFIG_FILE")"
 ROUTE_TABLE="$(jq -r '.route_table // 200' "$CONFIG_FILE")"
-RULE_PRIORITY="$(jq -r '.rule_priority // 10000' "$CONFIG_FILE")"
 DNS_PRIORITY="$(jq -r '.dns_rule_priority // 9999' "$CONFIG_FILE")"
 COUNTRY="$(jq -r '.country // "gr"' "$CONFIG_FILE")"
 DEVICE_COUNT="$(jq '.devices | length' "$CONFIG_FILE")"
@@ -118,11 +130,12 @@ fi
     exit 1
 }
 
-printf 'VPN Control 1.0.0 smoke test\n'
-printf 'Gateway: %s (%s), devices: %s, country: %s\n\n' "$LAN_IP" "$LAN_IF" "$DEVICE_COUNT" "$COUNTRY"
+printf 'VPN Control %s smoke test\n' "$EXPECTED_VERSION"
+printf 'Gateway: %s (%s), devices: %s, country: %s\n\n' \
+    "$LAN_IP" "$LAN_IF" "$DEVICE_COUNT" "$COUNTRY"
 
-check "vpn-control-dns.service is active" systemctl is-active --quiet vpn-control-dns.service
 check "tv-vpn-gateway.service is active" systemctl is-active --quiet tv-vpn-gateway.service
+check "vpn-control-dns.service is active" systemctl is-active --quiet vpn-control-dns.service
 check "vpn-control-web.service is active" systemctl is-active --quiet vpn-control-web.service
 check "NordVPN reports Connected" sh -c "runuser -u '$VPN_USER' -- nordvpn status | grep -q '^Status: Connected'"
 check "$VPN_IF has an IPv4 address" sh -c "ip -4 address show dev '$VPN_IF' | grep -q '^[[:space:]]*inet '"
@@ -133,15 +146,18 @@ check "nftables forwarding table exists" nft list table inet tv_vpn
 check "nftables NAT table exists" nft list table ip tv_vpn_nat
 check "DNS UID policy rule exists" sh -c "ip -4 rule show | grep -q '^${DNS_PRIORITY}:.*uidrange.*lookup ${ROUTE_TABLE}'"
 
-actual_rules="$(ip -4 rule show | awk -v table="$ROUTE_TABLE" '$0 ~ ("lookup " table "$") {count++} END {print count+0}')"
+actual_rules="$(
+    ip -4 rule show |
+        awk -v table="$ROUTE_TABLE" '$0 ~ ("lookup " table "$") {count++} END {print count+0}'
+)"
 if [[ "$actual_rules" -eq "$EXPECTED_RULES" ]]; then
     pass "Policy-rule count is ${actual_rules}/${EXPECTED_RULES}"
 else
     fail "Policy-rule count is ${actual_rules}/${EXPECTED_RULES}"
 fi
 
-if jq -e '
-    .version == "1.0.0" and
+if jq -e --arg version "$EXPECTED_VERSION" '
+    .version == $version and
     (.status == "healthy" or .status == "fail-closed") and
     .fail_closed_present == true and
     .nft_filter_present == true and
@@ -155,7 +171,8 @@ else
 fi
 
 check "Local DNS proxy resolves through gateway" dns_query "$LAN_IP" 5
-check "Web panel responds with authentication challenge" sh -c "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 'http://${LAN_IP}:8080/')\" = 401"
+check "Web panel responds with authentication challenge" \
+    sh -c "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 'http://${LAN_IP}:8080/')\" = 401"
 
 if [[ "$WITH_FAILOVER" == "true" ]]; then
     if nordvpn_as_user status | grep -q '^Status: Connected'; then
@@ -172,7 +189,8 @@ if [[ "$WITH_FAILOVER" == "true" ]]; then
         pass "DNS fails closed after VPN disconnect"
     fi
 
-    check "Blackhole route remains after disconnect" sh -c "ip -4 route show table '$ROUTE_TABLE' | grep -q '^blackhole default'"
+    check "Blackhole route remains after disconnect" \
+        sh -c "ip -4 route show table '$ROUTE_TABLE' | grep -q '^blackhole default'"
     if ip -4 route show table "$ROUTE_TABLE" | grep -q "^default dev ${VPN_IF}"; then
         fail "VPN default route remained after tunnel disconnect"
     else
@@ -184,9 +202,11 @@ if [[ "$WITH_FAILOVER" == "true" ]]; then
     ORIGINAL_CONNECTED=false
     sleep 8
 
-    check "NordVPN reconnects successfully" sh -c "runuser -u '$VPN_USER' -- nordvpn status | grep -q '^Status: Connected'"
+    check "NordVPN reconnects successfully" \
+        sh -c "runuser -u '$VPN_USER' -- nordvpn status | grep -q '^Status: Connected'"
     check "DNS recovers after reconnect" dns_query "$LAN_IP" 5
-    check "VPN default route is restored" sh -c "ip -4 route show table '$ROUTE_TABLE' | grep -q '^default dev $VPN_IF'"
+    check "VPN default route is restored" \
+        sh -c "ip -4 route show table '$ROUTE_TABLE' | grep -q '^default dev $VPN_IF'"
 fi
 
 printf '\nResult: %s passed, %s failed\n' "$pass_count" "$fail_count"
