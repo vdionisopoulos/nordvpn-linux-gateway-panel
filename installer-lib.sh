@@ -32,27 +32,67 @@ nordvpn_allowlist_contains() {
     nordvpn_as_user settings 2>/dev/null | grep -Fq "$subnet"
 }
 
+transition_lan_discovery_to_allowlist() {
+    local subnet="$1"
+    local unit_name="vpn-control-lan-access-$(date +%s)-$$"
+
+    command -v systemd-run >/dev/null 2>&1 || \
+        die "systemd-run is required for the safe LAN allowlist transition."
+
+    log "Switching NordVPN LAN access from discovery to exact allowlist: $subnet"
+    log "A brief LAN interruption is possible; the transition continues locally even if SSH pauses."
+
+    if ! systemd-run \
+        --quiet \
+        --collect \
+        --wait \
+        --unit "$unit_name" \
+        --property=Type=oneshot \
+        /usr/sbin/runuser -u "$VPN_USER" -- \
+        /bin/bash -c '
+            set -Eeuo pipefail
+            subnet="$1"
+
+            restore_discovery() {
+                nordvpn set lan-discovery on >/dev/null 2>&1 || true
+            }
+            trap restore_discovery ERR
+
+            nordvpn set lan-discovery off
+            nordvpn allowlist add subnet "$subnet"
+
+            trap - ERR
+        ' vpn-control-lan-transition "$subnet"; then
+        journalctl -u "$unit_name" --no-pager -n 50 2>/dev/null || true
+        die "Could not replace LAN Discovery with the exact subnet allowlist. LAN Discovery was restored when possible."
+    fi
+
+    nordvpn_allowlist_contains "$subnet" || \
+        die "NordVPN did not retain the expected LAN subnet allowlist: $subnet"
+}
+
 ensure_nordvpn_settings() {
     local subnet="$1"
     local allowlist_added=false
 
-    nordvpn_is_authenticated || die "NordVPN is not authenticated for user ${VPN_USER}. Run 'nordvpn login' first."
-
-    # Add the exact LAN subnet before disabling broad LAN discovery so an
-    # existing SSH session and the web panel cannot be locked out.
-    if ! nordvpn_allowlist_contains "$subnet"; then
-        log "Adding NordVPN allowlist subnet: $subnet"
-        nordvpn_as_user allowlist add subnet "$subnet"
-        allowlist_added=true
-    else
-        log "NordVPN allowlist already contains: $subnet"
-    fi
+    nordvpn_is_authenticated || \
+        die "NordVPN is not authenticated for user ${VPN_USER}. Run 'nordvpn login' first."
 
     nordvpn_as_user set technology nordlynx
     nordvpn_as_user set routing on
     nordvpn_as_user set firewall on
     nordvpn_as_user set killswitch off
-    nordvpn_as_user set lan-discovery off
+
+    # NordVPN does not permit adding a private subnet while Local Network
+    # Discovery is enabled. Run both operations in a local transient systemd
+    # unit so the exact allowlist is still applied if the SSH connection pauses.
+    if ! nordvpn_allowlist_contains "$subnet"; then
+        transition_lan_discovery_to_allowlist "$subnet"
+        allowlist_added=true
+    else
+        log "NordVPN allowlist already contains: $subnet"
+        nordvpn_as_user set lan-discovery off
+    fi
 
     NORDVPN_ALLOWLIST_ADDED="$allowlist_added"
 }
