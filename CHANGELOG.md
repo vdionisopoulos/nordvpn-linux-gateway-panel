@@ -22,7 +22,7 @@ First stable release of the NordVPN Linux Gateway Panel.
 - The web service tolerates a temporarily absent runtime health directory during startup
 - Installation and update output now includes the installed version and smoke-test command
 - LAN Discovery is replaced with the exact subnet allowlist through a local transient systemd unit
-- DNS failover validation now uses unique uncached query names and treats any DNS response, including NXDOMAIN, as evidence that a resolver was reached
+- DNS failover validation now uses unique uncached query names and accepts only normal upstream results (`NOERROR` or `NXDOMAIN`) as evidence that a resolver was reached
 
 ### Fixed
 
@@ -33,7 +33,7 @@ First stable release of the NordVPN Linux Gateway Panel.
 - Prevented DNS restart jobs from being canceled during ordered service startup
 - Allowed the hardened gateway service to read the protected runtime configuration without restoring broad root capabilities
 - Allowed dnsmasq to open the required netlink socket while retaining systemd address-family restrictions
-- Prevented cached `example.com` responses from causing false DNS failover failures in the smoke test
+- Prevented cached answers and locally generated `SERVFAIL` responses from causing false DNS failover failures in the smoke test
 - Centralized release-version handling to prevent application, installer, and heartbeat version drift
 
 ## [0.3.0] - 2026-07-07
