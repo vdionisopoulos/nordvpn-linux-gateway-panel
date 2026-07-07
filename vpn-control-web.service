@@ -1,0 +1,22 @@
+[Unit]
+Description=VPN Control Web Panel
+Wants=network-online.target
+After=network-online.target nordvpnd.service
+
+[Service]
+Type=simple
+User=__VPN_USER__
+Group=__VPN_USER__
+SupplementaryGroups=nordvpn
+WorkingDirectory=/opt/vpn-control
+EnvironmentFile=/etc/vpn-control-web.env
+Environment=HOME=/home/__VPN_USER__
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/vpn-control/.venv/bin/gunicorn --workers 1 --threads 4 --timeout 120 --bind ${VPN_WEB_BIND}:${VPN_WEB_PORT} app:app
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

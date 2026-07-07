@@ -31,7 +31,7 @@ flowchart LR
 ## Requirements
 
 - Ubuntu Server with systemd
-- A bridged or external virtual NIC on the same LAN as the managed devices
+- A bridged/external virtual NIC on the same LAN as the managed devices
 - NordVPN Linux CLI installed and authenticated
 - NordLynx enabled
 - A fixed IPv4 address for the Ubuntu gateway
@@ -53,7 +53,19 @@ cd nordvpn-linux-gateway-panel
 sudo ./install.sh
 ```
 
-The installer detects the default LAN interface, gateway VM address, and connected subnet. It can also be configured with environment variables documented in the installation script.
+The installer detects the default LAN interface, the gateway VM IPv4 address, and the connected subnet. Override them when necessary:
+
+```bash
+sudo VPN_USER="$USER" \
+     LAN_IF=eth0 \
+     BIND_IP=192.168.1.2 \
+     LAN_NET=192.168.1.0/24 \
+     WEB_PORT=8080 \
+     WEB_USER=admin \
+     WEB_PASSWORD='use-a-strong-password' \
+     DEFAULT_COUNTRY=gr \
+     ./install.sh
+```
 
 Open the panel at:
 
@@ -92,6 +104,22 @@ ip -4 rule show
 ip -4 route show table 200
 sudo nft list table inet tv_vpn
 sudo nft list table ip tv_vpn_nat
+```
+
+Traffic inspection:
+
+```bash
+sudo tcpdump -ni eth0 host CLIENT_IP
+sudo tcpdump -ni nordlynx
+```
+
+## Runtime files
+
+These files contain local state or secrets and must not be committed:
+
+```text
+/etc/vpn-control-web.env
+/var/lib/vpn-control/config.json
 ```
 
 ## Security

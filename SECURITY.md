@@ -9,5 +9,5 @@ Please report security issues privately through GitHub Security Advisories when 
 - The web panel is intended for a trusted LAN only.
 - Do not create an Internet-facing port forward for the web port.
 - HTTP Basic Authentication does not encrypt credentials. Use a TLS reverse proxy if the LAN is not trusted.
-- Never commit local runtime configuration, NordVPN tokens, WireGuard private keys, or packet captures.
+- Never commit `/etc/vpn-control-web.env`, `/var/lib/vpn-control/config.json`, NordVPN tokens, WireGuard private keys, or packet captures.
 - Disable or separately control IPv6 on managed clients to avoid bypassing an IPv4-only gateway.

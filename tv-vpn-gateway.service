@@ -1,0 +1,17 @@
+[Unit]
+Description=Multi-device NordVPN Gateway
+Documentation=man:ip-rule(8) man:ip-route(8) man:nft(8)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Environment=VPN_CONFIG_PATH=/var/lib/vpn-control/config.json
+ExecStart=/usr/local/sbin/tv-vpn-gateway
+Restart=always
+RestartSec=5
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target
