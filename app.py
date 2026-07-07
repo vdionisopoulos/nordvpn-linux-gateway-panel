@@ -9,14 +9,19 @@ import secrets
 import subprocess
 import tempfile
 import threading
+import time
 import urllib.request
 from functools import wraps
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, flash, redirect, render_template_string, request, session, url_for
+from flask import Flask, Response, flash, jsonify, redirect, render_template_string, request, session, url_for
 
+from validation import DeviceValidationError, validate_device
+
+APP_VERSION = "0.3.0"
 CONFIG_PATH = Path(os.environ.get("VPN_CONFIG_PATH", "/var/lib/vpn-control/config.json"))
+HEALTH_PATH = Path(os.environ.get("VPN_HEALTH_PATH", "/run/vpn-control/gateway-health.json"))
 WEB_USER = os.environ.get("VPN_WEB_USER", "admin")
 WEB_PASSWORD = os.environ.get("VPN_WEB_PASSWORD", "")
 SECRET_KEY = os.environ.get("VPN_WEB_SECRET_KEY", "")
@@ -58,12 +63,7 @@ COUNTRY_GROUPS = [
         ],
     ),
 ]
-
-COUNTRIES = {
-    code: label
-    for _, country_items in COUNTRY_GROUPS
-    for code, label in country_items
-}
+COUNTRIES = {code: label for _, items in COUNTRY_GROUPS for code, label in items}
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -84,7 +84,7 @@ PAGE = r"""
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     body { margin: 0; background:#111827; color:#e5e7eb; }
-    main { max-width: 920px; margin: 0 auto; padding: 24px; }
+    main { max-width: 980px; margin: 0 auto; padding: 24px; }
     h1 { margin-bottom: 4px; }
     .sub { color:#9ca3af; margin-top:0; }
     .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:16px; }
@@ -104,6 +104,13 @@ PAGE = r"""
     .actions { display:flex; gap:10px; margin-top:12px; }
     .actions form { flex:1; }
     .small { font-size:13px; }
+    .status-grid { display:grid; grid-template-columns:auto 1fr; gap:8px 14px; align-items:center; }
+    .pill { display:inline-block; border-radius:999px; padding:3px 9px; font-size:12px; font-weight:700; }
+    .healthy { background:#14532d; color:#bbf7d0; }
+    .protected { background:#713f12; color:#fef08a; }
+    .degraded, .stale, .unknown { background:#7f1d1d; color:#fecaca; }
+    .yes { color:#86efac; } .no { color:#fca5a5; }
+    footer { color:#6b7280; font-size:12px; margin-top:18px; text-align:center; }
   </style>
 </head>
 <body>
@@ -131,7 +138,7 @@ PAGE = r"""
           {% endfor %}
         </select>
         <button type="submit" style="margin-top:12px">Σύνδεση και αποθήκευση</button>
-        <p class="small muted">Οι κοντινότερες χώρες συνήθως δίνουν μικρότερο latency. Η πραγματική ταχύτητα εξαρτάται και από φόρτο server και διαδρομή παρόχου.</p>
+        <p class="small muted">Η πραγματική ταχύτητα εξαρτάται από την απόσταση, τον φόρτο του server και τη διαδρομή του παρόχου.</p>
       </form>
       <div class="actions">
         <form method="post" action="{{ url_for('reconnect') }}">
@@ -143,15 +150,29 @@ PAGE = r"""
           <button class="danger" type="submit">Disconnect</button>
         </form>
       </div>
-      <p class="small muted">Το disconnect είναι fail-closed: οι δηλωμένες συσκευές χάνουν Internet μέχρι να επανέλθει το VPN.</p>
+      <p class="small muted">Το disconnect είναι fail-closed: οι managed συσκευές χάνουν Internet μέχρι να επανέλθει το VPN.</p>
     </section>
 
     <section class="card">
-      <h2>Κατάσταση</h2>
+      <h2>NordVPN</h2>
       <p><strong>Public IP:</strong> {{ public_ip }}</p>
       <p><strong>Country check:</strong> {{ public_country }}</p>
       <pre>{{ nord_status }}</pre>
       <form method="get"><button class="secondary" type="submit">Ανανέωση</button></form>
+    </section>
+
+    <section class="card">
+      <h2>Gateway health</h2>
+      <p><span class="pill {{ health.status_class }}">{{ health.status_label }}</span></p>
+      <div class="status-grid">
+        <span>Heartbeat</span><strong>{{ health.age_label }}</strong>
+        <span>NordLynx</span><strong class="{{ 'yes' if health.vpn_ready else 'no' }}">{{ 'Ready' if health.vpn_ready else 'Unavailable' }}</strong>
+        <span>Policy rules</span><strong>{{ health.policy_rules_actual }}/{{ health.policy_rules_expected }}</strong>
+        <span>Fail-closed route</span><strong class="{{ 'yes' if health.fail_closed_present else 'no' }}">{{ 'Present' if health.fail_closed_present else 'Missing' }}</strong>
+        <span>nftables filter/NAT</span><strong class="{{ 'yes' if health.nft_filter_present and health.nft_nat_present else 'no' }}">{{ 'Present' if health.nft_filter_present and health.nft_nat_present else 'Missing' }}</strong>
+        <span>DNS proxy</span><strong class="{{ 'yes' if health.dns_service_active and health.dns_rule_present else 'no' }}">{{ 'Protected' if health.dns_service_active and health.dns_rule_present else 'Unavailable' }}</strong>
+      </div>
+      <p class="small muted">DNS για managed συσκευές: <code>{{ config.lan_ip }}</code></p>
     </section>
   </div>
 
@@ -193,13 +214,16 @@ PAGE = r"""
       <button type="submit" style="margin-top:12px">Προσθήκη συσκευής</button>
     </form>
     <p class="small muted">
-      Στη συσκευή βάλε Router/Gateway <code>{{ config.lan_ip }}</code> και σταθερή IP στο subnet <code>{{ config.lan_net }}</code>.
+      Στη συσκευή βάλε Router/Gateway και DNS <code>{{ config.lan_ip }}</code>, με σταθερή IP στο subnet <code>{{ config.lan_net }}</code>.
     </p>
   </section>
+
+  <footer>VPN Control {{ app_version }}</footer>
 </main>
 </body>
 </html>
 """
+
 
 def require_auth(view):
     @wraps(view)
@@ -211,9 +235,15 @@ def require_auth(view):
             and hmac.compare_digest(auth.password or "", WEB_PASSWORD)
         )
         if not valid:
-            return Response("Authentication required", 401, {"WWW-Authenticate": 'Basic realm="VPN Control"'})
+            return Response(
+                "Authentication required",
+                401,
+                {"WWW-Authenticate": 'Basic realm="VPN Control"'},
+            )
         return view(*args, **kwargs)
+
     return wrapped
+
 
 def csrf_token() -> str:
     token = session.get("csrf")
@@ -222,21 +252,29 @@ def csrf_token() -> str:
         session["csrf"] = token
     return token
 
+
 def validate_csrf() -> None:
     supplied = request.form.get("csrf", "")
     expected = session.get("csrf", "")
     if not expected or not hmac.compare_digest(supplied, expected):
         raise ValueError("Μη έγκυρο CSRF token. Ανανέωσε τη σελίδα.")
 
+
 def load_config() -> dict[str, Any]:
     with config_lock:
         with CONFIG_PATH.open("r", encoding="utf-8") as handle:
             return json.load(handle)
 
+
 def save_config(config: dict[str, Any]) -> None:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with config_lock:
-        fd, tmp_name = tempfile.mkstemp(prefix=".config-", suffix=".json", dir=str(CONFIG_PATH.parent), text=True)
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=".config-",
+            suffix=".json",
+            dir=str(CONFIG_PATH.parent),
+            text=True,
+        )
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 json.dump(config, handle, ensure_ascii=False, indent=2)
@@ -249,6 +287,7 @@ def save_config(config: dict[str, Any]) -> None:
             if os.path.exists(tmp_name):
                 os.unlink(tmp_name)
 
+
 def run_nordvpn(*args: str, timeout: int = COMMAND_TIMEOUT) -> tuple[bool, str]:
     try:
         completed = subprocess.run(
@@ -260,16 +299,74 @@ def run_nordvpn(*args: str, timeout: int = COMMAND_TIMEOUT) -> tuple[bool, str]:
         )
     except subprocess.TimeoutExpired:
         return False, "Το nordvpn command έληξε λόγω timeout."
-    output = "\n".join(part.strip() for part in (completed.stdout, completed.stderr) if part.strip())
+
+    output = "\n".join(
+        part.strip() for part in (completed.stdout, completed.stderr) if part.strip()
+    )
     return completed.returncode == 0, output or f"Exit code: {completed.returncode}"
+
 
 def fetch_text(url: str) -> str:
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "vpn-control/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": f"vpn-control/{APP_VERSION}"})
         with urllib.request.urlopen(req, timeout=8) as response:
             return response.read(128).decode("utf-8", errors="replace").strip()
     except Exception:
         return "Unavailable"
+
+
+def load_gateway_health(config: dict[str, Any]) -> dict[str, Any]:
+    default = {
+        "status": "unknown",
+        "status_class": "unknown",
+        "status_label": "Unknown",
+        "age_label": "No heartbeat",
+        "vpn_ready": False,
+        "policy_rules_actual": 0,
+        "policy_rules_expected": len(config.get("devices", [])) + 1,
+        "fail_closed_present": False,
+        "nft_filter_present": False,
+        "nft_nat_present": False,
+        "dns_service_active": False,
+        "dns_rule_present": False,
+    }
+
+    try:
+        with HEALTH_PATH.open("r", encoding="utf-8") as handle:
+            health = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return default
+
+    updated_epoch = int(health.get("updated_epoch", 0))
+    age = max(0, int(time.time()) - updated_epoch) if updated_epoch else 999999
+    stale_after = max(20, int(config.get("check_interval", 5)) * 4)
+    stale = age > stale_after
+
+    status = str(health.get("status", "unknown"))
+    if stale:
+        status_class = "stale"
+        status_label = "Stale"
+    elif status == "healthy":
+        status_class = "healthy"
+        status_label = "Healthy"
+    elif status == "fail-closed":
+        status_class = "protected"
+        status_label = "Fail-closed"
+    else:
+        status_class = "degraded"
+        status_label = "Degraded"
+
+    default.update(health)
+    default.update(
+        {
+            "status_class": status_class,
+            "status_label": status_label,
+            "age_label": f"{age}s ago" if updated_epoch else "No heartbeat",
+            "stale": stale,
+        }
+    )
+    return default
+
 
 @app.after_request
 def security_headers(response):
@@ -283,6 +380,7 @@ def security_headers(response):
     response.headers["Cache-Control"] = "no-store"
     return response
 
+
 @app.get("/")
 @require_auth
 def index():
@@ -291,13 +389,24 @@ def index():
     return render_template_string(
         PAGE,
         config=config,
-        countries=COUNTRIES,
         country_groups=COUNTRY_GROUPS,
         nord_status=status_output,
         public_ip=fetch_text("https://api.ipify.org"),
         public_country=fetch_text("https://ipinfo.io/country"),
+        health=load_gateway_health(config),
         csrf=csrf_token(),
+        app_version=APP_VERSION,
     )
+
+
+@app.get("/healthz")
+@require_auth
+def healthz():
+    config = load_config()
+    health = load_gateway_health(config)
+    response_code = 200 if health.get("status_class") in {"healthy", "protected"} else 503
+    return jsonify(health), response_code
+
 
 @app.post("/country")
 @require_auth
@@ -320,10 +429,14 @@ def set_country():
         if ok_auto:
             flash(f"Συνδέθηκε: {COUNTRIES[code]}. Το auto-connect ενημερώθηκε.")
         else:
-            flash(f"Συνδέθηκε: {COUNTRIES[code]}, αλλά απέτυχε το auto-connect: {output_auto}")
+            flash(
+                f"Συνδέθηκε: {COUNTRIES[code]}, αλλά απέτυχε το auto-connect: "
+                f"{output_auto}"
+            )
     except Exception as exc:
         flash(str(exc))
     return redirect(url_for("index"))
+
 
 @app.post("/reconnect")
 @require_auth
@@ -342,6 +455,7 @@ def reconnect():
         flash(str(exc))
     return redirect(url_for("index"))
 
+
 @app.post("/disconnect")
 @require_auth
 def disconnect():
@@ -355,58 +469,46 @@ def disconnect():
         flash(str(exc))
     return redirect(url_for("index"))
 
+
 @app.post("/devices/add")
 @require_auth
 def add_device():
     try:
         validate_csrf()
-        name = request.form.get("name", "").strip()
-        ip_text = request.form.get("ip", "").strip()
-
-        if not name or len(name) > 40:
-            raise ValueError("Το όνομα πρέπει να έχει 1–40 χαρακτήρες.")
-
-        address = ipaddress.ip_address(ip_text)
-        if address.version != 4:
-            raise ValueError("Απαιτείται IPv4 διεύθυνση.")
-
         config = load_config()
-        lan_network = ipaddress.ip_network(config["lan_net"], strict=False)
-        lan_ip = ipaddress.ip_address(config["lan_ip"])
-
-        if address not in lan_network:
-            raise ValueError(f"Η IP πρέπει να ανήκει στο {lan_network}.")
-        if address in (lan_network.network_address, lan_network.broadcast_address, lan_ip):
-            raise ValueError("Η IP είναι δεσμευμένη ή είναι η IP της VPN VM.")
-
+        device = validate_device(
+            request.form.get("name", ""),
+            request.form.get("ip", ""),
+            config,
+        )
         devices = config.setdefault("devices", [])
-        if any(item["ip"] == str(address) for item in devices):
-            raise ValueError("Η IP υπάρχει ήδη στη λίστα.")
-
-        devices.append({"name": name, "ip": str(address)})
+        devices.append(device)
         devices.sort(key=lambda item: tuple(int(part) for part in item["ip"].split(".")))
         save_config(config)
-        flash(f"Προστέθηκε: {name} ({address}). Εφαρμογή σε λίγα δευτερόλεπτα.")
-    except Exception as exc:
+        flash(
+            f"Προστέθηκε: {device['name']} ({device['ip']}). "
+            "Εφαρμογή σε λίγα δευτερόλεπτα."
+        )
+    except (DeviceValidationError, ValueError) as exc:
         flash(str(exc))
     return redirect(url_for("index"))
+
 
 @app.post("/devices/remove")
 @require_auth
 def remove_device():
     try:
         validate_csrf()
-        ip_text = request.form.get("ip", "").strip()
-        address = str(ipaddress.ip_address(ip_text))
-
+        address = str(ipaddress.ip_address(request.form.get("ip", "").strip()))
         config = load_config()
         before = len(config.get("devices", []))
-        config["devices"] = [item for item in config.get("devices", []) if item.get("ip") != address]
+        config["devices"] = [
+            item for item in config.get("devices", []) if item.get("ip") != address
+        ]
         if len(config["devices"]) == before:
             raise ValueError("Η συσκευή δεν βρέθηκε.")
-
         save_config(config)
         flash(f"Αφαιρέθηκε η συσκευή {address}. Εφαρμογή σε λίγα δευτερόλεπτα.")
-    except Exception as exc:
+    except ValueError as exc:
         flash(str(exc))
     return redirect(url_for("index"))
