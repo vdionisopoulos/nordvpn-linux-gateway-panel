@@ -1,6 +1,6 @@
 # Fail-closed DNS design
 
-Version 0.3.0 adds a local dnsmasq proxy to reduce configuration mistakes and prevent fallback to the normal LAN resolver.
+Version 0.3.0 added a local dnsmasq proxy to reduce configuration mistakes and prevent fallback to the normal LAN resolver.
 
 ## Data path
 
@@ -34,23 +34,33 @@ When a managed device uses the LAN router as DNS, its DNS packets remain inside 
 
 ## Verification
 
-From another LAN host:
+The nftables input chain accepts gateway DNS requests only from addresses listed in `devices`. DNS requests from other LAN hosts are intentionally dropped.
+
+From a **managed device**:
 
 ```bash
 nslookup example.com GATEWAY-IP
 dig @GATEWAY-IP example.com
 ```
 
-On the gateway:
+From the gateway itself:
 
 ```bash
+nslookup example.com GATEWAY-IP
+dig @GATEWAY-IP example.com
 sudo systemctl status vpn-control-dns.service
 ip -4 rule show | grep uidrange
 sudo tcpdump -ni eth0 'port 53'
 sudo tcpdump -ni nordlynx 'port 53'
 ```
 
-Disconnect NordVPN and repeat the lookup. It should fail rather than use the normal LAN router.
+A lookup from an unregistered administrator laptop or another non-managed LAN host is expected to time out. Add that host temporarily as a managed device only when an end-to-end LAN test is required.
+
+Disconnect NordVPN and repeat an uncached lookup from a managed device. It should fail closed rather than use the normal LAN router. The supplied smoke test performs this check with unique query names:
+
+```bash
+sudo bash scripts/smoke-test.sh --with-failover
+```
 
 ## Limitations
 
