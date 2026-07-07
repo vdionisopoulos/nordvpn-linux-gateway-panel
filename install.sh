@@ -121,7 +121,7 @@ systemctl reset-failed tv-vpn-gateway.service vpn-control-dns.service vpn-contro
 systemctl restart tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
 
 COUNTRY="$(jq -r '.country // "gr"' "$RUNTIME_CONFIG")"
-nordvpn_as_user set autoconnect on "$COUNTRY"
+nordvpn_set_idempotent autoconnect on "$COUNTRY"
 nordvpn_as_user connect "$COUNTRY" || log "NordVPN connection was not established automatically; fail-closed protection remains active."
 
 HEALTH_READY=false
