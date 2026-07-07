@@ -117,15 +117,40 @@ if command -v systemd-analyze >/dev/null 2>&1; then
 fi
 
 systemctl enable tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
-systemctl restart tv-vpn-gateway.service
-systemctl restart vpn-control-dns.service
-systemctl restart vpn-control-web.service
+systemctl reset-failed tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service 2>/dev/null || true
+systemctl restart tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
 
 COUNTRY="$(jq -r '.country // "gr"' "$RUNTIME_CONFIG")"
 nordvpn_as_user set autoconnect on "$COUNTRY"
 nordvpn_as_user connect "$COUNTRY" || log "NordVPN connection was not established automatically; fail-closed protection remains active."
 
-sleep 8
+HEALTH_READY=false
+for _ in $(seq 1 20); do
+    if systemctl is-active --quiet tv-vpn-gateway.service && \
+       systemctl is-active --quiet vpn-control-dns.service && \
+       systemctl is-active --quiet vpn-control-web.service && \
+       [[ -s /run/vpn-control/gateway-health.json ]] && \
+       jq -e --arg version "$PROJECT_VERSION" '
+            .version == $version and
+            (.status == "healthy" or .status == "fail-closed") and
+            .fail_closed_present == true and
+            .nft_filter_present == true and
+            .nft_nat_present == true and
+            .dns_service_active == true and
+            .dns_rule_present == true
+       ' /run/vpn-control/gateway-health.json >/dev/null 2>&1; then
+        HEALTH_READY=true
+        break
+    fi
+    sleep 2
+done
+
+if [[ "$HEALTH_READY" != "true" ]]; then
+    journalctl -u tv-vpn-gateway.service -u vpn-control-dns.service -u vpn-control-web.service \
+        -n 100 --no-pager || true
+    die "The installed services did not reach a protected healthy state."
+fi
+
 systemctl --no-pager --full status \
     tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
 
