@@ -2,12 +2,13 @@
 
 Ubuntu gateway και LAN-only web panel για δρομολόγηση επιλεγμένων τηλεοράσεων, tablets, κονσολών και άλλων συσκευών μέσω NordVPN NordLynx.
 
-Τρέχουσα έκδοση: **1.0.1**
+Τρέχουσα έκδοση: **1.0.2**
 
 ## Βασικές λειτουργίες
 
 - Προσθήκη και αφαίρεση managed συσκευών με IPv4
 - Αλλαγή χώρας NordVPN από browser
+- Πλήρης εναλλαγή του web interface μεταξύ Ελληνικών και Αγγλικών
 - Policy routing ανά συσκευή
 - nftables NAT και fail-closed προστασία
 - Τοπικό dnsmasq proxy με τα upstream DNS queries υποχρεωτικά μέσω VPN
@@ -107,6 +108,8 @@ Panel:
 http://IP-ΤΗΣ-VM:8080
 ```
 
+Στην πρώτη επίσκεψη, το panel επιλέγει Ελληνικά ή Αγγλικά από τη γλώσσα του browser. Τα κουμπιά `EN` και `ΕΛ` στην επάνω δεξιά πλευρά αλλάζουν τη γλώσσα και η επιλογή διατηρείται στο authenticated session.
+
 ## Update
 
 ```bash
@@ -114,7 +117,7 @@ git pull --ff-only
 sudo ./update.sh
 ```
 
-Η έκδοση `1.0.1` ενημερώνει application, version metadata, systemd units, DNS configuration και runtime schema. Η fail-closed προστασία ξεκινά πριν από το DNS και το panel. Αν το update αποτύχει μετά τη δημιουργία backups, γίνεται προσπάθεια επαναφοράς των προηγούμενων managed αρχείων και services.
+Η έκδοση `1.0.2` ενημερώνει application, translations, version metadata, systemd units, DNS configuration και runtime schema. Η fail-closed προστασία ξεκινά πριν από το DNS και το panel. Αν το update αποτύχει μετά τη δημιουργία backups, γίνεται προσπάθεια επαναφοράς των προηγούμενων managed αρχείων και services.
 
 Για εγκατάσταση παλαιότερη από `0.3.0`, άλλαξε το DNS όλων των managed συσκευών ώστε να δείχνει στην IP της Ubuntu VM.
 
@@ -166,7 +169,7 @@ sudo ./uninstall.sh --purge
 
 ## Releases
 
-Το [CHANGELOG.md](CHANGELOG.md) περιγράφει τις εκδόσεις και το [stable release checklist](docs/release-checklist.md) τα απαιτούμενα release gates. Το tag `v1.0.1` ενεργοποιεί workflow που επαναλαμβάνει τους ελέγχους και δημιουργεί ZIP, tar.gz και SHA-256 checksums.
+Το [CHANGELOG.md](CHANGELOG.md) περιγράφει τις εκδόσεις και το [stable release checklist](docs/release-checklist.md) τα απαιτούμενα release gates. Το tag `v1.0.2` ενεργοποιεί workflow που επαναλαμβάνει τους ελέγχους και δημιουργεί ZIP, tar.gz και SHA-256 checksums.
 
 ## Ασφάλεια
 

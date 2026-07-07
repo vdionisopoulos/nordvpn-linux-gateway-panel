@@ -44,7 +44,10 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     python3 python3-venv python3-pip jq nftables curl dnsmasq-base
 ensure_dns_user
 
-python3 -m py_compile "$SCRIPT_DIR/app.py" "$SCRIPT_DIR/validation.py"
+python3 -m py_compile \
+    "$SCRIPT_DIR/app.py" \
+    "$SCRIPT_DIR/i18n.py" \
+    "$SCRIPT_DIR/validation.py"
 bash -n \
     "$SCRIPT_DIR/gateway.sh" \
     "$SCRIPT_DIR/install.sh" \
@@ -59,6 +62,7 @@ ROLLBACK_ACTIVE=false
 MISSING_BEFORE=()
 MANAGED_PATHS=(
     /opt/vpn-control/app.py
+    /opt/vpn-control/i18n.py
     /opt/vpn-control/validation.py
     /opt/vpn-control/requirements.txt
     /opt/vpn-control/VERSION
@@ -142,6 +146,7 @@ sysctl -q -w net.ipv4.ip_forward=0
 
 install -d -m 0755 /opt/vpn-control
 install -m 0644 "$SCRIPT_DIR/app.py" /opt/vpn-control/app.py
+install -m 0644 "$SCRIPT_DIR/i18n.py" /opt/vpn-control/i18n.py
 install -m 0644 "$SCRIPT_DIR/validation.py" /opt/vpn-control/validation.py
 install -m 0644 "$SCRIPT_DIR/requirements.txt" /opt/vpn-control/requirements.txt
 install -m 0644 "$SCRIPT_DIR/VERSION" /opt/vpn-control/VERSION

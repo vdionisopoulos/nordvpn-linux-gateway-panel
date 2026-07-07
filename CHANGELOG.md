@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## [1.0.2] - 2026-07-07
+
+### Added
+
+- English and Greek web-panel interface with an explicit `EN` / `ΕΛ` language switch
+- Browser-language detection on first visit, with English as the safe fallback
+- Persistent language preference stored in the authenticated Flask session
+- Translation-contract and language-selection tests
+
+### Changed
+
+- Country groups, country names, health labels, device actions, validation errors, and flash messages are now localized
+- Installer and transactional updater now install, back up, and restore the translation module
+
+### Fixed
+
+- Removed the mismatch between the English GitHub project and the previously Greek-only web interface
+
 ## [1.0.1] - 2026-07-07
 
 ### Changed
