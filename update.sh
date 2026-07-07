@@ -50,28 +50,101 @@ bash -n \
     "$SCRIPT_DIR/install.sh" \
     "$SCRIPT_DIR/update.sh" \
     "$SCRIPT_DIR/uninstall.sh" \
-    "$SCRIPT_DIR/installer-lib.sh"
+    "$SCRIPT_DIR/installer-lib.sh" \
+    "$SCRIPT_DIR/scripts/smoke-test.sh"
 
 stamp="$(date +%Y%m%d-%H%M%S)"
-for path in \
-    /opt/vpn-control/app.py \
-    /opt/vpn-control/validation.py \
-    /opt/vpn-control/requirements.txt \
-    /usr/local/sbin/tv-vpn-gateway \
-    /etc/systemd/system/tv-vpn-gateway.service \
-    /etc/systemd/system/vpn-control-web.service \
-    /etc/systemd/system/vpn-control-dns.service \
-    "$DNS_CONFIG"; do
-    backup_file "$path" "$stamp"
+UPDATE_COMPLETE=false
+ROLLBACK_ACTIVE=false
+MISSING_BEFORE=()
+MANAGED_PATHS=(
+    /opt/vpn-control/app.py
+    /opt/vpn-control/validation.py
+    /opt/vpn-control/requirements.txt
+    /opt/vpn-control/VERSION
+    /usr/local/sbin/tv-vpn-gateway
+    /etc/systemd/system/tv-vpn-gateway.service
+    /etc/systemd/system/vpn-control-web.service
+    /etc/systemd/system/vpn-control-dns.service
+    /etc/vpn-control-web.env
+    "$DNS_CONFIG"
+    "$RUNTIME_CONFIG"
+    "$STATE_FILE"
+)
+
+was_missing_before() {
+    local path="$1"
+    local candidate
+    for candidate in "${MISSING_BEFORE[@]}"; do
+        [[ "$candidate" == "$path" ]] && return 0
+    done
+    return 1
+}
+
+rollback_update() {
+    local failed_line="$1"
+    local exit_code="$2"
+
+    trap - ERR
+
+    if [[ "$UPDATE_COMPLETE" == "true" || "$ROLLBACK_ACTIVE" == "true" ]]; then
+        exit "$exit_code"
+    fi
+
+    ROLLBACK_ACTIVE=true
+    set +e
+
+    log "Update failed near line ${failed_line}; restoring previous files."
+    systemctl stop vpn-control-web.service vpn-control-dns.service tv-vpn-gateway.service 2>/dev/null
+    sysctl -q -w net.ipv4.ip_forward=0
+
+    local path
+    for path in "${MANAGED_PATHS[@]}"; do
+        if [[ -e "${path}.backup.${stamp}" ]]; then
+            restore_backup "$path" "$stamp"
+        elif was_missing_before "$path"; then
+            rm -f -- "$path"
+        fi
+    done
+
+    if was_missing_before /etc/systemd/system/vpn-control-dns.service; then
+        rm -f /etc/systemd/system/multi-user.target.wants/vpn-control-dns.service
+    fi
+
+    systemctl daemon-reload
+    systemctl reset-failed tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service 2>/dev/null
+
+    if [[ -f /etc/systemd/system/tv-vpn-gateway.service ]]; then
+        systemctl restart tv-vpn-gateway.service 2>/dev/null
+    fi
+    if [[ -f /etc/systemd/system/vpn-control-dns.service ]]; then
+        systemctl restart vpn-control-dns.service 2>/dev/null
+    fi
+    if [[ -f /etc/systemd/system/vpn-control-web.service ]]; then
+        systemctl restart vpn-control-web.service 2>/dev/null
+    fi
+
+    log "Rollback completed. Inspect: journalctl -u tv-vpn-gateway -u vpn-control-dns -u vpn-control-web -n 100"
+    exit "$exit_code"
+}
+trap 'rollback_update "$LINENO" "$?"' ERR
+
+for path in "${MANAGED_PATHS[@]}"; do
+    if [[ -e "$path" ]]; then
+        backup_file "$path" "$stamp"
+    else
+        MISSING_BEFORE+=("$path")
+    fi
 done
 
-systemctl stop vpn-control-web.service tv-vpn-gateway.service 2>/dev/null || true
+systemctl stop vpn-control-web.service vpn-control-dns.service tv-vpn-gateway.service 2>/dev/null || true
 sysctl -q -w net.ipv4.ip_forward=0
 
 install -d -m 0755 /opt/vpn-control
 install -m 0644 "$SCRIPT_DIR/app.py" /opt/vpn-control/app.py
 install -m 0644 "$SCRIPT_DIR/validation.py" /opt/vpn-control/validation.py
 install -m 0644 "$SCRIPT_DIR/requirements.txt" /opt/vpn-control/requirements.txt
+install -m 0644 "$SCRIPT_DIR/VERSION" /opt/vpn-control/VERSION
 install -m 0755 "$SCRIPT_DIR/gateway.sh" /usr/local/sbin/tv-vpn-gateway
 install -m 0644 "$SCRIPT_DIR/tv-vpn-gateway.service" \
     /etc/systemd/system/tv-vpn-gateway.service
@@ -128,30 +201,52 @@ if command -v systemd-analyze >/dev/null 2>&1; then
         /etc/systemd/system/vpn-control-web.service
 fi
 
-systemctl enable vpn-control-dns.service tv-vpn-gateway.service vpn-control-web.service
-systemctl restart vpn-control-dns.service
-systemctl restart tv-vpn-gateway.service
-systemctl restart vpn-control-web.service
+systemctl enable tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
+systemctl reset-failed tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service 2>/dev/null || true
+systemctl restart tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
 
-nordvpn_as_user set autoconnect on "$COUNTRY"
+nordvpn_set_idempotent autoconnect on "$COUNTRY"
 nordvpn_as_user connect "$COUNTRY" || log "NordVPN is currently disconnected; managed devices remain fail-closed."
 
-for path in \
-    /opt/vpn-control/app.py \
-    /opt/vpn-control/validation.py \
-    /opt/vpn-control/requirements.txt \
-    /usr/local/sbin/tv-vpn-gateway \
-    /etc/systemd/system/tv-vpn-gateway.service \
-    /etc/systemd/system/vpn-control-web.service \
-    /etc/systemd/system/vpn-control-dns.service \
-    "$DNS_CONFIG"; do
+HEALTH_READY=false
+for _ in $(seq 1 20); do
+    if systemctl is-active --quiet tv-vpn-gateway.service && \
+       systemctl is-active --quiet vpn-control-dns.service && \
+       systemctl is-active --quiet vpn-control-web.service && \
+       [[ -s /run/vpn-control/gateway-health.json ]] && \
+       jq -e --arg version "$PROJECT_VERSION" '
+            .version == $version and
+            (.status == "healthy" or .status == "fail-closed") and
+            .fail_closed_present == true and
+            .nft_filter_present == true and
+            .nft_nat_present == true and
+            .dns_service_active == true and
+            .dns_rule_present == true
+       ' /run/vpn-control/gateway-health.json >/dev/null 2>&1; then
+        HEALTH_READY=true
+        break
+    fi
+    sleep 2
+done
+
+if [[ "$HEALTH_READY" != "true" ]]; then
+    journalctl -u tv-vpn-gateway.service -u vpn-control-dns.service -u vpn-control-web.service \
+        -n 100 --no-pager || true
+    log "The updated services did not reach a protected healthy state."
+    false
+fi
+
+UPDATE_COMPLETE=true
+trap - ERR
+
+for path in "${MANAGED_PATHS[@]}"; do
     rotate_backups "$path" 5
 done
 
-sleep 2
 systemctl --no-pager --full status \
-    vpn-control-dns.service tv-vpn-gateway.service vpn-control-web.service
+    tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
 
 echo
 echo "Update to ${PROJECT_VERSION} completed."
-echo "Managed-device DNS is now the gateway address: ${BIND_IP}"
+echo "Managed-device DNS is the gateway address: ${BIND_IP}"
+echo "Run: sudo bash scripts/smoke-test.sh --with-failover"

@@ -23,6 +23,18 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Validate version consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          test -n "$version"
+          VPN_WEB_PASSWORD=test VPN_WEB_SECRET_KEY=test \
+            python3 -c 'import app; assert app.APP_VERSION == open("VERSION", encoding="utf-8").read().strip()'
+          SCRIPT_DIR="$PWD"
+          source installer-lib.sh
+          test "$PROJECT_VERSION" = "$version"
+
       - name: Python lint
         run: ruff check .
 
@@ -30,14 +42,15 @@ jobs:
         run: pytest
 
       - name: Bash syntax
-        run: bash -n gateway.sh install.sh update.sh uninstall.sh installer-lib.sh
+        run: bash -n gateway.sh install.sh update.sh uninstall.sh installer-lib.sh scripts/smoke-test.sh
 
       - name: ShellCheck
-        run: shellcheck -x gateway.sh install.sh update.sh uninstall.sh
+        run: shellcheck -x gateway.sh install.sh update.sh uninstall.sh scripts/smoke-test.sh
 
       - name: Render and validate nftables rules
         run: |
-          VPN_CONFIG_PATH=config.example.json ./gateway.sh --render-nft > /tmp/vpn-control.nft
+          VPN_CONFIG_PATH=config.example.json VPN_VERSION_PATH=VERSION \
+            ./gateway.sh --render-nft > /tmp/vpn-control.nft
           sudo nft -c -f /tmp/vpn-control.nft
 
       - name: Validate systemd units
@@ -53,3 +66,12 @@ jobs:
             vpn-control-dns.service \
             tv-vpn-gateway.service \
             /tmp/vpn-control-web.service
+
+      - name: Validate required sandbox access
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'CapabilityBoundingSet=CAP_NET_ADMIN CAP_DAC_READ_SEARCH' \
+            tv-vpn-gateway.service
+          grep -Eq '^RestrictAddressFamilies=.*AF_NETLINK' \
+            vpn-control-dns.service

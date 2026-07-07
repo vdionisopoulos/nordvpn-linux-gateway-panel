@@ -3,7 +3,13 @@ set -Eeuo pipefail
 
 CONFIG_FILE="${VPN_CONFIG_PATH:-/var/lib/vpn-control/config.json}"
 HEALTH_FILE="${VPN_HEALTH_PATH:-/run/vpn-control/gateway-health.json}"
+VERSION_FILE="${VPN_VERSION_PATH:-/opt/vpn-control/VERSION}"
+PROJECT_VERSION="development"
 LAST_CONFIG_HASH=""
+
+if [[ -r "$VERSION_FILE" ]]; then
+    PROJECT_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
+fi
 
 log() {
     echo "[tv-vpn-gateway] $*"
@@ -19,7 +25,7 @@ bool_json() {
 
 require_commands() {
     local command_name
-    for command_name in chmod date dirname grep id install ip jq mktemp mv nft sha256sum sleep sysctl systemctl; do
+    for command_name in chmod date dirname grep id install ip jq mktemp mv nft sha256sum sleep sysctl systemctl tr; do
         command -v "$command_name" >/dev/null 2>&1 || {
             log "Missing command: $command_name"
             exit 1
@@ -284,7 +290,7 @@ write_health() {
     install -d -m 0755 "$(dirname "$HEALTH_FILE")"
     temp_file="$(mktemp "${HEALTH_FILE}.tmp.XXXXXX")"
     jq -n \
-        --arg version "0.3.0" \
+        --arg version "$PROJECT_VERSION" \
         --arg status "$status" \
         --arg updated_at "$updated_at" \
         --argjson updated_epoch "$updated_epoch" \
