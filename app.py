@@ -19,7 +19,16 @@ from flask import Flask, Response, flash, jsonify, redirect, render_template_str
 
 from validation import DeviceValidationError, validate_device
 
-APP_VERSION = "0.3.0"
+
+def read_app_version() -> str:
+    try:
+        version = Path(__file__).with_name("VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        return "development"
+    return version or "development"
+
+
+APP_VERSION = read_app_version()
 CONFIG_PATH = Path(os.environ.get("VPN_CONFIG_PATH", "/var/lib/vpn-control/config.json"))
 HEALTH_PATH = Path(os.environ.get("VPN_HEALTH_PATH", "/run/vpn-control/gateway-health.json"))
 WEB_USER = os.environ.get("VPN_WEB_USER", "admin")
