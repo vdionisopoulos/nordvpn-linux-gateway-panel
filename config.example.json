@@ -1,0 +1,20 @@
+{
+  "country": "gr",
+  "devices": [
+    {
+      "name": "Living Room TV",
+      "ip": "192.168.1.50"
+    },
+    {
+      "name": "Tablet",
+      "ip": "192.168.1.51"
+    }
+  ],
+  "lan_if": "eth0",
+  "lan_ip": "192.168.1.2",
+  "lan_net": "192.168.1.0/24",
+  "vpn_if": "nordlynx",
+  "route_table": 200,
+  "rule_priority": 10000,
+  "check_interval": 5
+}
