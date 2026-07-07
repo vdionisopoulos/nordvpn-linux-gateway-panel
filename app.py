@@ -261,7 +261,7 @@ PAGE = r"""
 
 def current_language() -> str:
     saved = session.get("language")
-    if saved in SUPPORTED_LANGUAGES:
+    if saved in TRANSLATIONS:
         return str(saved)
     browser_match = request.accept_languages.best_match(SUPPORTED_LANGUAGES)
     return normalize_language(browser_match or DEFAULT_LANGUAGE)
