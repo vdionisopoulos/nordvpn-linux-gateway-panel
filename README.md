@@ -2,12 +2,13 @@
 
 A lightweight Ubuntu gateway and LAN-only web panel for routing selected TVs, tablets, consoles, and other devices through NordVPN NordLynx.
 
-Current release: **1.0.1**
+Current release: **1.0.2**
 
 ## Features
 
 - Add and remove managed devices by IPv4 address
 - Change the NordVPN exit country from a browser
+- Switch the complete web interface between English and Greek
 - Source-based policy routing for multiple devices
 - nftables forwarding, NAT, and fail-closed protection
 - Local dnsmasq proxy with DNS traffic forced through the VPN routing table
@@ -159,7 +160,7 @@ sudo VPN_USER="$USER" \
      ./install.sh
 ```
 
-Open `http://GATEWAY-IP:8080`.
+Open `http://GATEWAY-IP:8080`. The panel detects English or Greek from the browser on the first visit. Use the `EN` and `ΕΛ` controls in the header to change language; the preference is retained in the authenticated session.
 
 ## Updating
 
@@ -247,7 +248,7 @@ CI also validates the rendered nftables ruleset with `nft -c -f` and verifies th
 
 ## Releases
 
-See [CHANGELOG.md](CHANGELOG.md) for release history and [the stable release checklist](docs/release-checklist.md) for release gates. A signed tag such as `v1.0.1` triggers a validated release workflow that creates ZIP and tar.gz archives plus SHA-256 checksums.
+See [CHANGELOG.md](CHANGELOG.md) for release history and [the stable release checklist](docs/release-checklist.md) for release gates. A signed tag such as `v1.0.2` triggers a validated release workflow that creates ZIP and tar.gz archives plus SHA-256 checksums.
 
 ## Security
 
