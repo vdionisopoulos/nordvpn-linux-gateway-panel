@@ -1,17 +1,32 @@
 [Unit]
 Description=Multi-device NordVPN Gateway
 Documentation=man:ip-rule(8) man:ip-route(8) man:nft(8)
-Wants=network-online.target
-After=network-online.target
+Wants=network-online.target nordvpnd.service vpn-control-dns.service
+After=network-online.target nordvpnd.service vpn-control-dns.service
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 Environment=VPN_CONFIG_PATH=/var/lib/vpn-control/config.json
+Environment=VPN_HEALTH_PATH=/run/vpn-control/gateway-health.json
 ExecStart=/usr/local/sbin/tv-vpn-gateway
 Restart=always
 RestartSec=5
 TimeoutStopSec=5
+RuntimeDirectory=vpn-control
+RuntimeDirectoryMode=0755
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
+CapabilityBoundingSet=CAP_NET_ADMIN
 
 [Install]
 WantedBy=multi-user.target
