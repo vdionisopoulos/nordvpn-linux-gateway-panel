@@ -2,7 +2,7 @@
 
 A lightweight Ubuntu gateway and LAN-only web panel for routing selected TVs, tablets, consoles, and other devices through NordVPN NordLynx.
 
-Current release: **0.3.0**
+Current release: **1.0.0**
 
 ## Features
 
@@ -12,7 +12,9 @@ Current release: **0.3.0**
 - nftables forwarding, NAT, and fail-closed protection
 - Local dnsmasq proxy with DNS traffic forced through the VPN routing table
 - Gateway heartbeat and health visibility in the web panel
-- systemd services with defensive hardening
+- systemd services with defensive hardening and ordered startup
+- Transactional updates with managed-file rollback
+- Installed-gateway smoke test, including optional VPN failover validation
 - HTTP Basic Authentication, CSRF protection, and atomic configuration writes
 
 ## Architecture
@@ -158,25 +160,43 @@ Open `http://GATEWAY-IP:8080`.
 ## Updating
 
 ```bash
-git pull
+git pull --ff-only
 sudo ./update.sh
 ```
 
-The updater refreshes the application, validation code, dependencies, gateway script, all systemd units, dnsmasq configuration, and runtime schema. It runs `systemctl daemon-reload`, validates the units, restarts the services, and keeps only the five newest backups per managed file.
+The updater refreshes the application, version metadata, dependencies, gateway script, all systemd units, dnsmasq configuration, and runtime schema. It runs `systemctl daemon-reload`, validates the units, starts fail-closed gateway protection before DNS and the panel, and verifies the protected health state before declaring success.
 
-### Upgrade from an earlier version
+Managed files are backed up before replacement. If the update fails after that point, the updater restores the previous managed files and attempts to restart the previous services. Only the five newest backups per managed file are retained.
 
-Version `0.3.0` adds the DNS proxy. After updating, change every managed device to:
+### Upgrade from versions before 0.3.0
+
+Version `0.3.0` introduced the DNS proxy. After updating, configure every managed device with:
 
 ```text
 DNS = Ubuntu gateway IPv4 address
 ```
 
-## Verification
+## Installed-gateway validation
+
+Run the non-disruptive smoke test:
 
 ```bash
-sudo systemctl status vpn-control-dns.service --no-pager
+sudo bash scripts/smoke-test.sh
+```
+
+For a complete release or maintenance validation that temporarily disconnects and reconnects NordVPN:
+
+```bash
+sudo bash scripts/smoke-test.sh --with-failover
+```
+
+The failover test verifies that DNS stops when the tunnel is unavailable, the blackhole route remains, the VPN route is removed, and DNS/routing recover after reconnect.
+
+## Manual verification
+
+```bash
 sudo systemctl status tv-vpn-gateway.service --no-pager
+sudo systemctl status vpn-control-dns.service --no-pager
 sudo systemctl status vpn-control-web.service --no-pager
 ip -4 rule show
 ip -4 route show table 200
@@ -192,8 +212,6 @@ nslookup example.com GATEWAY-IP
 sudo tcpdump -ni eth0 'port 53'
 sudo tcpdump -ni nordlynx 'port 53'
 ```
-
-Disconnect NordVPN and repeat the lookup. It should fail instead of falling back to the normal LAN resolver.
 
 ## Health model
 
@@ -215,11 +233,15 @@ sudo ./uninstall.sh --purge
 python3 -m pip install -r requirements.txt -r requirements-dev.txt
 ruff check .
 pytest
-shellcheck -x gateway.sh install.sh update.sh uninstall.sh
-bash -n gateway.sh install.sh update.sh uninstall.sh installer-lib.sh
+shellcheck -x gateway.sh install.sh update.sh uninstall.sh scripts/smoke-test.sh
+bash -n gateway.sh install.sh update.sh uninstall.sh installer-lib.sh scripts/smoke-test.sh
 ```
 
 CI also validates the rendered nftables ruleset with `nft -c -f` and verifies the systemd units.
+
+## Releases
+
+See [CHANGELOG.md](CHANGELOG.md) for release history and [the stable release checklist](docs/release-checklist.md) for release gates. A signed tag such as `v1.0.0` triggers a validated release workflow that creates ZIP and tar.gz archives plus SHA-256 checksums.
 
 ## Security
 
