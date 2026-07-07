@@ -23,6 +23,33 @@ nordvpn_as_user() {
     runuser -u "$VPN_USER" -- nordvpn "$@"
 }
 
+nordvpn_command_idempotent() {
+    local output
+    local exit_code
+
+    if output="$(nordvpn_as_user "$@" 2>&1)"; then
+        [[ -n "$output" ]] && printf '%s\n' "$output"
+        return 0
+    else
+        exit_code=$?
+    fi
+
+    [[ -n "$output" ]] && printf '%s\n' "$output"
+
+    # Some NordVPN Linux CLI versions return a non-zero exit code when a
+    # requested setting is already in the desired state. Treat only that
+    # explicit no-op response as success; propagate all other failures.
+    if grep -qiE 'already (set|enabled|disabled|connected)' <<< "$output"; then
+        return 0
+    fi
+
+    return "$exit_code"
+}
+
+nordvpn_set_idempotent() {
+    nordvpn_command_idempotent set "$@"
+}
+
 nordvpn_is_authenticated() {
     nordvpn_as_user account >/dev/null 2>&1
 }
@@ -53,12 +80,30 @@ transition_lan_discovery_to_allowlist() {
             set -Eeuo pipefail
             subnet="$1"
 
+            run_idempotent() {
+                local output
+                local exit_code
+
+                if output="$("$@" 2>&1)"; then
+                    [[ -n "$output" ]] && printf "%s\n" "$output"
+                    return 0
+                else
+                    exit_code=$?
+                fi
+
+                [[ -n "$output" ]] && printf "%s\n" "$output"
+                if grep -qiE "already (set|enabled|disabled|connected)" <<< "$output"; then
+                    return 0
+                fi
+                return "$exit_code"
+            }
+
             restore_discovery() {
                 nordvpn set lan-discovery on >/dev/null 2>&1 || true
             }
             trap restore_discovery ERR
 
-            nordvpn set lan-discovery off
+            run_idempotent nordvpn set lan-discovery off
             nordvpn allowlist add subnet "$subnet"
 
             trap - ERR
@@ -78,10 +123,10 @@ ensure_nordvpn_settings() {
     nordvpn_is_authenticated || \
         die "NordVPN is not authenticated for user ${VPN_USER}. Run 'nordvpn login' first."
 
-    nordvpn_as_user set technology nordlynx
-    nordvpn_as_user set routing on
-    nordvpn_as_user set firewall on
-    nordvpn_as_user set killswitch off
+    nordvpn_set_idempotent technology nordlynx
+    nordvpn_set_idempotent routing on
+    nordvpn_set_idempotent firewall on
+    nordvpn_set_idempotent killswitch off
 
     # NordVPN does not permit adding a private subnet while Local Network
     # Discovery is enabled. Run both operations in a local transient systemd
@@ -91,7 +136,7 @@ ensure_nordvpn_settings() {
         allowlist_added=true
     else
         log "NordVPN allowlist already contains: $subnet"
-        nordvpn_as_user set lan-discovery off
+        nordvpn_set_idempotent lan-discovery off
     fi
 
     NORDVPN_ALLOWLIST_ADDED="$allowlist_added"
