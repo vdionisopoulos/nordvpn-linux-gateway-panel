@@ -54,6 +54,7 @@ install -d -m 0755 /opt/vpn-control
 install -m 0644 "$SCRIPT_DIR/app.py" /opt/vpn-control/app.py
 install -m 0644 "$SCRIPT_DIR/validation.py" /opt/vpn-control/validation.py
 install -m 0644 "$SCRIPT_DIR/requirements.txt" /opt/vpn-control/requirements.txt
+install -m 0644 "$SCRIPT_DIR/VERSION" /opt/vpn-control/VERSION
 
 python3 -m venv /opt/vpn-control/.venv
 /opt/vpn-control/.venv/bin/pip install --upgrade pip
@@ -96,8 +97,8 @@ VPN_COMMAND_TIMEOUT=90
 ENVEOF
 chmod 0600 /etc/vpn-control-web.env
 
-# Forwarding is intentionally enabled by the gateway service only after the
-# policy rules, blackhole route and nftables guard are in place.
+# Forwarding is enabled by the gateway service only after policy rules,
+# the blackhole route, and nftables protection are in place.
 rm -f /etc/sysctl.d/99-vpn-gateway.conf /etc/sysctl.d/99-tv-vpn-gateway.conf
 sysctl -q -w net.ipv4.ip_forward=0
 
@@ -115,22 +116,22 @@ if command -v systemd-analyze >/dev/null 2>&1; then
         /etc/systemd/system/vpn-control-web.service
 fi
 
-systemctl enable vpn-control-dns.service tv-vpn-gateway.service vpn-control-web.service
-systemctl restart vpn-control-dns.service
+systemctl enable tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
 systemctl restart tv-vpn-gateway.service
+systemctl restart vpn-control-dns.service
 systemctl restart vpn-control-web.service
 
 COUNTRY="$(jq -r '.country // "gr"' "$RUNTIME_CONFIG")"
 nordvpn_as_user set autoconnect on "$COUNTRY"
 nordvpn_as_user connect "$COUNTRY" || log "NordVPN connection was not established automatically; fail-closed protection remains active."
 
-sleep 2
+sleep 8
 systemctl --no-pager --full status \
-    vpn-control-dns.service tv-vpn-gateway.service vpn-control-web.service
+    tv-vpn-gateway.service vpn-control-dns.service vpn-control-web.service
 
 cat <<EOF
 
-Installation complete.
+Installation of ${PROJECT_VERSION} complete.
 URL:      http://${BIND_IP}:${WEB_PORT}
 Username: ${WEB_USER}
 DNS:      ${BIND_IP}
@@ -145,6 +146,9 @@ cat <<EOF
 Configure every managed device with:
   Gateway: ${BIND_IP}
   DNS:     ${BIND_IP}
+
+Validate the installation with:
+  sudo bash scripts/smoke-test.sh --with-failover
 
 Do not expose port ${WEB_PORT} to the Internet.
 EOF
