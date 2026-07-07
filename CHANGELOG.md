@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented here.
 
+## [1.0.0] - 2026-07-07
+
+First stable release of the NordVPN Linux Gateway Panel.
+
+### Added
+
+- Installed-gateway smoke test with optional VPN disconnect/reconnect validation
+- Stable release checklist covering clean install, upgrade, failover, and uninstall
+- Automated tagged-release workflow producing ZIP, tar.gz, and SHA-256 checksum files
+- Transactional updater rollback for managed files and systemd units
+- Packaged `VERSION` file used by the application, installer, updater, and health heartbeat
+
+### Changed
+
+- Gateway protection now starts before the local DNS proxy and web panel
+- The DNS proxy is bound to the gateway service lifecycle, preventing it from remaining active without fail-closed routing protection
+- The updater validates all services and the protected health state before declaring success
+- The web service tolerates a temporarily absent runtime health directory during startup
+- Installation and update output now includes the installed version and smoke-test command
+
+### Fixed
+
+- Removed the brief startup interval in which the DNS proxy could be available before gateway nftables protection
+- Added automatic restoration of previous managed files if an update fails
+- Centralized release-version handling to prevent application, installer, and heartbeat version drift
+
 ## [0.3.0] - 2026-07-07
 
 ### Added
