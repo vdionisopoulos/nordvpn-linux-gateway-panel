@@ -17,15 +17,19 @@ First stable release of the NordVPN Linux Gateway Panel.
 ### Changed
 
 - Gateway protection now starts before the local DNS proxy and web panel
-- The DNS proxy is bound to the gateway service lifecycle, preventing it from remaining active without fail-closed routing protection
+- The DNS proxy requires the gateway service and is started in the same ordered systemd transaction
 - The updater validates all services and the protected health state before declaring success
 - The web service tolerates a temporarily absent runtime health directory during startup
 - Installation and update output now includes the installed version and smoke-test command
+- LAN Discovery is replaced with the exact subnet allowlist through a local transient systemd unit
 
 ### Fixed
 
 - Removed the brief startup interval in which the DNS proxy could be available before gateway nftables protection
 - Added automatic restoration of previous managed files if an update fails
+- Rollback now terminates the failed update instead of allowing a misleading success message
+- Removed stale DNS enablement links when rolling back an upgrade from a version without the DNS service
+- Prevented DNS restart jobs from being canceled during ordered service startup
 - Centralized release-version handling to prevent application, installer, and heartbeat version drift
 
 ## [0.3.0] - 2026-07-07
