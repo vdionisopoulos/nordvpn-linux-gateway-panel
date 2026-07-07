@@ -16,7 +16,8 @@ Use this checklist before publishing a stable version.
 Test on a supported Ubuntu Server VM with a bridged/external NIC:
 
 ```bash
-git clone https://github.com/vdionisopoulos/nordvpn-linux-gateway-panel.git
+git clone --branch release/v1.0.0 \
+  https://github.com/vdionisopoulos/nordvpn-linux-gateway-panel.git
 cd nordvpn-linux-gateway-panel
 sudo ./install.sh
 sudo bash scripts/smoke-test.sh --with-failover
@@ -38,7 +39,8 @@ Confirm:
 Test an upgrade from the latest previous public version:
 
 ```bash
-git pull
+git fetch origin
+git switch release/v1.0.0
 sudo ./update.sh
 sudo bash scripts/smoke-test.sh --with-failover
 ```
@@ -51,6 +53,7 @@ Confirm:
 - [ ] Runtime configuration is migrated correctly
 - [ ] systemd units are updated and reloaded
 - [ ] Five-backup rotation is enforced
+- [ ] A failed update restores the previous managed files and services
 
 ## Uninstall test
 
@@ -68,13 +71,13 @@ Confirm:
 
 ## Publish
 
-After merging the release pull request:
+After the release pull request is approved and merged:
 
 ```bash
 git switch main
 git pull --ff-only
-git tag -s v1.0.0 -m "NordVPN Linux Gateway Panel v1.0.0"
+git tag -a v1.0.0 -m "NordVPN Linux Gateway Panel v1.0.0"
 git push origin v1.0.0
 ```
 
-Pushing the tag runs the release workflow, validates the tagged source again, creates source archives and SHA-256 checksums, and publishes the GitHub Release.
+Pushing the annotated tag runs the release workflow, validates the tagged source again, creates source archives and SHA-256 checksums, and publishes the GitHub Release.
