@@ -31,6 +31,7 @@ COUNTRY_KEYS = {
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "en": {
         "language_name": "English",
+        "language_selector": "Language",
         "subtitle": "Manage LAN devices through NordLynx",
         "exit_country": "Exit country",
         "default_country": "Preferred country",
@@ -45,7 +46,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "returns."
         ),
         "public_ip": "Public IP",
-        "country_check": "Country check",
+        "country_check": "Detected country",
+        "nordvpn_status": "NordVPN status",
         "refresh": "Refresh",
         "gateway_health": "Gateway health",
         "heartbeat": "Heartbeat",
@@ -71,15 +73,18 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Set Router/Gateway and DNS to {lan_ip}, using a fixed IP in subnet {lan_net}."
         ),
         "status_unknown": "Unknown",
-        "status_stale": "Stale",
+        "status_stale": "Stale heartbeat",
         "status_healthy": "Healthy",
         "status_fail_closed": "Fail-closed",
-        "status_degraded": "Degraded",
+        "status_degraded": "Protection degraded",
         "no_heartbeat": "No heartbeat",
         "seconds_ago": "{seconds}s ago",
         "authentication_required": "Authentication required",
-        "invalid_csrf": "Invalid CSRF token. Refresh the page.",
-        "nordvpn_timeout": "The nordvpn command timed out.",
+        "invalid_csrf": "Invalid CSRF token. Refresh the page and try again.",
+        "nordvpn_timeout": "The NordVPN command timed out. Try again or check nordvpnd.",
+        "nordvpn_unavailable": (
+            "The NordVPN CLI is unavailable. Verify the installation and nordvpnd service."
+        ),
         "unsupported_country": "Unsupported country.",
         "connection_failed": "Connection failed:\n{output}",
         "connected_autoconnect_updated": (
@@ -100,6 +105,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Removed device {ip}. The change will apply within a few seconds."
         ),
         "device_not_found": "The device was not found.",
+        "configuration_update_failed": (
+            "The gateway configuration could not be updated. Check the web service logs."
+        ),
         "validation_name": "The name must contain 1–40 characters.",
         "validation_ip": "Invalid IP address.",
         "validation_ipv4": "An IPv4 address is required.",
@@ -127,6 +135,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "el": {
         "language_name": "Ελληνικά",
+        "language_selector": "Γλώσσα",
         "subtitle": "Διαχείριση συσκευών LAN μέσω NordLynx",
         "exit_country": "Χώρα εξόδου",
         "default_country": "Προεπιλεγμένη χώρα",
@@ -142,68 +151,75 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "να επανέλθει το VPN."
         ),
         "public_ip": "Δημόσια IP",
-        "country_check": "Έλεγχος χώρας",
+        "country_check": "Εντοπισμένη χώρα",
+        "nordvpn_status": "Κατάσταση NordVPN",
         "refresh": "Ανανέωση",
-        "gateway_health": "Υγεία gateway",
+        "gateway_health": "Κατάσταση gateway",
         "heartbeat": "Heartbeat",
         "nordlynx": "NordLynx",
         "policy_rules": "Κανόνες δρομολόγησης",
-        "fail_closed_route": "Fail-closed διαδρομή",
+        "fail_closed_route": "Fail-closed route",
         "nftables_filter_nat": "nftables filter/NAT",
         "dns_proxy": "DNS proxy",
         "managed_dns": "DNS για managed συσκευές",
         "ready": "Έτοιμο",
         "unavailable": "Μη διαθέσιμο",
-        "present": "Ενεργό",
+        "present": "Παρόν",
         "missing": "Απουσιάζει",
         "protected": "Προστατευμένο",
         "devices_via_vpn": "Συσκευές μέσω VPN",
         "name": "Όνομα",
         "remove": "Αφαίρεση",
-        "no_devices": "Δεν υπάρχουν συσκευές.",
+        "no_devices": "Δεν έχουν προστεθεί συσκευές.",
         "device_name": "Όνομα συσκευής",
         "device_name_placeholder": "π.χ. Apple TV",
         "add_device": "Προσθήκη συσκευής",
         "device_config_hint": (
-            "Στη συσκευή βάλε Router/Gateway και DNS {lan_ip}, με σταθερή IP στο subnet "
+            "Στη συσκευή όρισε Router/Gateway και DNS το {lan_ip}, με σταθερή IP στο subnet "
             "{lan_net}."
         ),
-        "status_unknown": "Άγνωστο",
+        "status_unknown": "Άγνωστη κατάσταση",
         "status_stale": "Παλιό heartbeat",
-        "status_healthy": "Υγιές",
+        "status_healthy": "Κανονική λειτουργία",
         "status_fail_closed": "Fail-closed",
-        "status_degraded": "Υποβαθμισμένο",
+        "status_degraded": "Υποβαθμισμένη προστασία",
         "no_heartbeat": "Χωρίς heartbeat",
-        "seconds_ago": "πριν από {seconds}s",
+        "seconds_ago": "πριν από {seconds} δευτ.",
         "authentication_required": "Απαιτείται ταυτοποίηση",
-        "invalid_csrf": "Μη έγκυρο CSRF token. Ανανέωσε τη σελίδα.",
-        "nordvpn_timeout": "Η εντολή nordvpn έληξε λόγω timeout.",
+        "invalid_csrf": "Μη έγκυρο CSRF token. Ανανέωσε τη σελίδα και δοκίμασε ξανά.",
+        "nordvpn_timeout": "Η εντολή NordVPN έληξε λόγω timeout. Έλεγξε το nordvpnd.",
+        "nordvpn_unavailable": (
+            "Το NordVPN CLI δεν είναι διαθέσιμο. Έλεγξε την εγκατάσταση και το nordvpnd."
+        ),
         "unsupported_country": "Μη υποστηριζόμενη χώρα.",
         "connection_failed": "Αποτυχία σύνδεσης:\n{output}",
         "connected_autoconnect_updated": (
-            "Συνδέθηκε: {country}. Το auto-connect ενημερώθηκε."
+            "Έγινε σύνδεση στη χώρα {country} και ενημερώθηκε το auto-connect."
         ),
         "connected_autoconnect_failed": (
-            "Συνδέθηκε: {country}, αλλά απέτυχε το auto-connect: {output}"
+            "Έγινε σύνδεση στη χώρα {country}, αλλά απέτυχε το auto-connect: {output}"
         ),
         "saved_country_invalid": "Η αποθηκευμένη χώρα δεν είναι έγκυρη.",
-        "reconnected_new_server": "Έγινε reconnect σε νέο server: {country}.",
+        "reconnected_new_server": "Έγινε επανασύνδεση σε νέο server στη χώρα {country}.",
         "vpn_disconnected": (
             "Το VPN αποσυνδέθηκε. Οι managed συσκευές παραμένουν fail-closed."
         ),
         "device_added": (
-            "Προστέθηκε: {name} ({ip}). Η αλλαγή θα εφαρμοστεί σε λίγα δευτερόλεπτα."
+            "Προστέθηκε η συσκευή {name} ({ip}). Η αλλαγή θα εφαρμοστεί σε λίγα δευτερόλεπτα."
         ),
         "device_removed": (
             "Αφαιρέθηκε η συσκευή {ip}. Η αλλαγή θα εφαρμοστεί σε λίγα δευτερόλεπτα."
         ),
         "device_not_found": "Η συσκευή δεν βρέθηκε.",
+        "configuration_update_failed": (
+            "Δεν ήταν δυνατή η ενημέρωση του gateway configuration. Έλεγξε τα logs του web service."
+        ),
         "validation_name": "Το όνομα πρέπει να έχει 1–40 χαρακτήρες.",
         "validation_ip": "Μη έγκυρη διεύθυνση IP.",
         "validation_ipv4": "Απαιτείται IPv4 διεύθυνση.",
         "validation_lan_config": "Το LAN configuration του gateway δεν είναι έγκυρο.",
         "validation_outside_lan": "Η IP πρέπει να ανήκει στο {network}.",
-        "validation_reserved_ip": "Η IP είναι δεσμευμένη ή είναι η IP της VPN VM.",
+        "validation_reserved_ip": "Η IP είναι δεσμευμένη ή ανήκει στο VPN gateway.",
         "validation_duplicate_ip": "Η IP υπάρχει ήδη στη λίστα.",
         "country_group_nearby": "Κοντινές / συνήθως χαμηλότερο latency",
         "country_group_western_europe": "Δυτική Ευρώπη",
