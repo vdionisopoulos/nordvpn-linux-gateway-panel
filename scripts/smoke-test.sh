@@ -4,6 +4,7 @@ set -Eeuo pipefail
 CONFIG_FILE="${VPN_CONFIG_PATH:-/var/lib/vpn-control/config.json}"
 STATE_FILE="/var/lib/vpn-control/install-state.json"
 VERSION_FILE="${VPN_VERSION_PATH:-/opt/vpn-control/VERSION}"
+INITIAL_CONVERGENCE_TIMEOUT="${VPN_SMOKE_CONVERGENCE_TIMEOUT:-30}"
 WITH_FAILOVER=false
 ORIGINAL_CONNECTED=false
 VPN_USER=""
@@ -103,6 +104,35 @@ raise SystemExit(1)
 PY
 }
 
+initial_gateway_state_ready() {
+    ip -4 route show table "$ROUTE_TABLE" |
+        grep -qE "^default dev ${VPN_IF}([[:space:]]|$)" || return 1
+
+    [[ -s /run/vpn-control/gateway-health.json ]] || return 1
+    jq -e --arg version "$EXPECTED_VERSION" '
+        .version == $version and
+        .status == "healthy" and
+        .vpn_ready == true and
+        .vpn_default_present == true and
+        .fail_closed_present == true and
+        .dns_service_active == true and
+        .dns_rule_present == true
+    ' /run/vpn-control/gateway-health.json >/dev/null 2>&1
+}
+
+wait_for_initial_gateway_state() {
+    local deadline=$((SECONDS + INITIAL_CONVERGENCE_TIMEOUT))
+
+    while ((SECONDS < deadline)); do
+        if initial_gateway_state_ready; then
+            return 0
+        fi
+        sleep 2
+    done
+
+    return 1
+}
+
 restore_vpn() {
     if [[ "$WITH_FAILOVER" == "true" && "$ORIGINAL_CONNECTED" == "true" ]]; then
         printf '\nRestoring NordVPN connection to %s...\n' "$COUNTRY"
@@ -156,6 +186,16 @@ fi
 printf 'VPN Control %s smoke test\n' "$EXPECTED_VERSION"
 printf 'Gateway: %s (%s), devices: %s, country: %s\n\n' \
     "$LAN_IP" "$LAN_IF" "$DEVICE_COUNT" "$COUNTRY"
+
+if nordvpn_as_user status | grep -q '^Status: Connected'; then
+    printf 'Waiting up to %ss for the connected gateway state to converge...\n' \
+        "$INITIAL_CONVERGENCE_TIMEOUT"
+    if wait_for_initial_gateway_state; then
+        printf 'Gateway state converged.\n\n'
+    else
+        printf 'WARNING: gateway state did not converge before validation; continuing with explicit checks.\n\n' >&2
+    fi
+fi
 
 check "tv-vpn-gateway.service is active" systemctl is-active --quiet tv-vpn-gateway.service
 check "vpn-control-dns.service is active" systemctl is-active --quiet vpn-control-dns.service
