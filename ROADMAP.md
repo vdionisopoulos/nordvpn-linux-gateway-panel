@@ -4,7 +4,7 @@ This document describes the **suggested direction** for future releases of NordV
 
 The roadmap is intentionally flexible. Version scope and ordering may change after testing, user feedback, security review, or changes in the NordVPN Linux client. A feature is not considered committed until it is tracked in an issue or included in an active release pull request.
 
-Current stable release: **v1.0.2**
+Current stable release: **v1.0.3**
 
 ## Guiding principles
 
@@ -19,22 +19,18 @@ Every future change should preserve these guarantees:
 
 ---
 
-## v1.0.3 — Maintenance and repository quality
+## Delivered in v1.0.3 — Maintenance and repository quality
 
-**Goal:** consolidate small fixes without changing the routing architecture.
+The maintenance release completed the initial repository-quality scope without changing the routing architecture:
 
-Suggested scope:
-
-- Complete and maintain the GitHub Community Profile.
-- Clean up obsolete branches and one-time release workflows.
-- Improve Wiki pages, screenshots, examples, and troubleshooting notes.
-- Correct minor UI and translation issues.
-- Improve validation and operational error messages.
-- Apply reviewed dependency updates.
-- Verify that `VERSION`, `CHANGELOG.md`, tags, and GitHub Releases remain synchronized.
-- Add regression tests for any production issues reported after v1.0.2.
-
-This should remain a low-risk patch release.
+- Completed the Community Profile with a Code of Conduct and contribution templates.
+- Repaired and expanded bug-report and pull-request templates.
+- Added a structured feature-request form.
+- Removed the obsolete version-specific tag workflow and introduced a reusable publisher.
+- Added release metadata synchronization checks.
+- Updated pytest and Ruff after review.
+- Refined English and Greek UI labels and operational messages.
+- Added English and Greek roadmaps and improved repository documentation.
 
 ---
 
@@ -165,8 +161,8 @@ Example target behavior:
 ```text
 Living-room TV → United States
 Bedroom TV     → Greece
-Tablet          → Germany
-Console         → United Kingdom
+Tablet         → Germany
+Console        → United Kingdom
 ```
 
 This is a major architectural change and requires research and prototyping. The current NordVPN CLI normally manages one active tunnel, so a possible design may require:
