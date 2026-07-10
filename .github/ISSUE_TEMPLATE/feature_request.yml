@@ -1,0 +1,51 @@
+name: Feature request
+description: Propose an improvement while preserving fail-closed behavior
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an improvement. Large changes should explain their routing, DNS, security, upgrade, and fail-closed impact.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem or limitation should this feature solve?
+      placeholder: Describe the current limitation and who it affects.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the expected user experience and operational behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Routing, DNS, and security impact
+      description: Explain any effect on policy routing, nftables, DNS, privileges, listeners, or fail-closed guarantees.
+    validations:
+      required: true
+  - type: textarea
+    id: upgrade
+    attributes:
+      label: Upgrade and compatibility considerations
+      description: Note configuration migration, rollback, installer, updater, or backward-compatibility requirements.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe workarounds or alternative designs you considered.
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: This request does not intentionally weaken fail-closed routing or DNS protection.
+          required: true
+        - label: I reviewed the roadmap and existing issues for similar requests.
+          required: true
