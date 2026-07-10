@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## [1.0.3] - 2026-07-10
+
+### Added
+
+- Structured feature-request form with explicit routing, DNS, security, and upgrade-impact questions
+- Release metadata consistency checker for `VERSION`, changelog, English and Greek READMEs, and roadmaps
+- Reusable manually dispatched release-tag workflow that publishes the version declared by `VERSION`
+- English and Greek project roadmaps
+
+### Changed
+
+- Updated development dependencies to pytest 9.1.1 and Ruff 0.15.20
+- Completed the pull-request checklist for fail-closed behavior, rollback, security, testing, and documentation
+- Refined English and Greek health labels, operational messages, timeout guidance, and device instructions
+- Updated repository and release documentation for the maintenance release
+
+### Fixed
+
+- Repaired the malformed bug-report template and completed its diagnostic and privacy guidance
+- Removed the obsolete version-specific one-time tag publisher
+- Reduced ambiguity between healthy, fail-closed, stale, and degraded web-panel states
+
 ## [1.0.2] - 2026-07-07
 
 ### Added
