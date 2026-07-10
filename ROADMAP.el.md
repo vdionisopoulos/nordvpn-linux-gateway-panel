@@ -4,7 +4,7 @@
 
 Το roadmap είναι ευέλικτο. Η σειρά και το scope μπορούν να αλλάξουν μετά από δοκιμές, feedback χρηστών, security review ή αλλαγές στο NordVPN Linux client. Μια λειτουργία θεωρείται δεσμευμένη μόνο όταν έχει καταγραφεί σε issue ή περιλαμβάνεται σε ενεργό release pull request.
 
-Τρέχουσα σταθερή έκδοση: **v1.0.2**
+Τρέχουσα σταθερή έκδοση: **v1.0.3**
 
 ## Βασικές αρχές
 
@@ -19,22 +19,18 @@
 
 ---
 
-## v1.0.3 — Maintenance και ποιότητα repository
+## Παραδόθηκε στο v1.0.3 — Maintenance και ποιότητα repository
 
-**Στόχος:** συγκέντρωση μικρών βελτιώσεων χωρίς αλλαγή της routing αρχιτεκτονικής.
+Η maintenance έκδοση ολοκλήρωσε το αρχικό scope ποιότητας χωρίς αλλαγή της routing αρχιτεκτονικής:
 
-Προτεινόμενο scope:
-
-- Ολοκλήρωση και συντήρηση του GitHub Community Profile.
-- Καθαρισμός obsolete branches και προσωρινών release workflows.
-- Βελτίωση Wiki, screenshots, παραδειγμάτων και troubleshooting οδηγιών.
-- Μικρές διορθώσεις UI και μεταφράσεων.
-- Βελτίωση validation και operational error messages.
-- Ελεγχόμενα dependency updates.
-- Έλεγχος συνέπειας μεταξύ `VERSION`, `CHANGELOG.md`, tags και GitHub Releases.
-- Regression tests για προβλήματα που θα αναφερθούν μετά το v1.0.2.
-
-Η έκδοση αυτή πρέπει να παραμείνει patch release χαμηλού ρίσκου.
+- Ολοκληρώθηκε το Community Profile με Code of Conduct και contribution templates.
+- Διορθώθηκαν και επεκτάθηκαν τα bug-report και pull-request templates.
+- Προστέθηκε δομημένο feature-request form.
+- Αφαιρέθηκε το obsolete version-specific tag workflow και προστέθηκε reusable publisher.
+- Προστέθηκαν έλεγχοι συγχρονισμού release metadata.
+- Αναβαθμίστηκαν τα pytest και Ruff μετά από έλεγχο.
+- Βελτιώθηκαν τα αγγλικά και ελληνικά UI labels και operational messages.
+- Προστέθηκαν αγγλικό και ελληνικό roadmap και βελτιώθηκε η τεκμηρίωση.
 
 ---
 
@@ -165,8 +161,8 @@ vpn_reconnect_total
 ```text
 Living-room TV → United States
 Bedroom TV     → Greece
-Tablet          → Germany
-Console         → United Kingdom
+Tablet         → Germany
+Console        → United Kingdom
 ```
 
 Πρόκειται για μεγάλη αρχιτεκτονική αλλαγή που απαιτεί έρευνα και prototype. Επειδή το NordVPN CLI συνήθως διαχειρίζεται ένα ενεργό tunnel, μια πιθανή σχεδίαση μπορεί να απαιτεί:
