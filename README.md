@@ -2,7 +2,7 @@
 
 A lightweight Ubuntu gateway and LAN-only web panel for routing selected TVs, tablets, consoles, and other devices through NordVPN NordLynx.
 
-Current release: **1.0.2**
+Current release: **1.0.3**
 
 ## Features
 
@@ -21,6 +21,17 @@ Current release: **1.0.2**
 ## Screenshot
 
 ![VPN Control Panel showing healthy gateway, protected DNS, and managed devices](docs/panel.png)
+
+The screenshot is redacted for publication. The installed panel supports both English and Greek through the `EN` / `ΕΛ` controls.
+
+## Documentation
+
+- [Project Wiki](https://github.com/vdionisopoulos/nordvpn-linux-gateway-panel/wiki)
+- [English roadmap](ROADMAP.md)
+- [Greek roadmap](ROADMAP.el.md)
+- [Fail-closed DNS design](docs/dns.md)
+- [NordVPN authentication and secret handling](docs/nordvpn-authentication.md)
+- [Stable release checklist](docs/release-checklist.md)
 
 ## Architecture
 
@@ -76,7 +87,7 @@ For a headless server:
 nordvpn login --token
 ```
 
-The project does not require a raw WireGuard private key, manual NordLynx configuration, or OpenVPN service credentials. It uses the authenticated local NordVPN CLI session. See [NordVPN authentication and secret handling](docs/nordvpn-authentication.md).
+The project does not require a raw WireGuard private key, manual NordLynx configuration, or OpenVPN service credentials. It uses the authenticated local NordVPN CLI session.
 
 ### Required NordVPN settings
 
@@ -123,7 +134,7 @@ Router:        192.168.1.2
 DNS:           192.168.1.2
 ```
 
-The local dnsmasq proxy runs as a dedicated user. Its upstream DNS traffic is selected by a UID policy rule and sent through routing table `200`. If `nordlynx` is unavailable, the table's blackhole default prevents fallback to the normal router. See [Fail-closed DNS design](docs/dns.md).
+The local dnsmasq proxy runs as a dedicated user. Its upstream DNS traffic is selected by a UID policy rule and sent through routing table `200`. If `nordlynx` is unavailable, the table's blackhole default prevents fallback to the normal router.
 
 ## Pre-installation checks
 
@@ -238,17 +249,18 @@ sudo ./uninstall.sh --purge
 
 ```bash
 python3 -m pip install -r requirements.txt -r requirements-dev.txt
+python3 scripts/check-version-sync.py
 ruff check .
 pytest
 shellcheck -x gateway.sh install.sh update.sh uninstall.sh scripts/smoke-test.sh
 bash -n gateway.sh install.sh update.sh uninstall.sh installer-lib.sh scripts/smoke-test.sh
 ```
 
-CI also validates the rendered nftables ruleset with `nft -c -f` and verifies the systemd units.
+CI also validates release metadata, the rendered nftables ruleset with `nft -c -f`, and the systemd units.
 
 ## Releases
 
-See [CHANGELOG.md](CHANGELOG.md) for release history and [the stable release checklist](docs/release-checklist.md) for release gates. A signed tag such as `v1.0.2` triggers a validated release workflow that creates ZIP and tar.gz archives plus SHA-256 checksums.
+See [CHANGELOG.md](CHANGELOG.md) for release history. A tag matching the version declared in `VERSION`, such as `v1.0.3`, triggers the validated release workflow, which creates ZIP and tar.gz archives plus SHA-256 checksums and marks the release as latest.
 
 ## Security
 
