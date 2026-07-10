@@ -1,11 +1,12 @@
-name: Publish v1.0.2 tag
+name: Publish current release tag
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/publish-v1.0.0.yml
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish, without the v prefix
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,15 +17,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Verify release source
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         shell: bash
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < VERSION)"
-          test "$version" = "1.0.2"
-          grep -Fq '## [1.0.2] - 2026-07-07' CHANGELOG.md
+          test -n "$version"
+          test "$REQUESTED_VERSION" = "$version"
+          grep -Eq "^## \[${version//./\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md
           if git ls-remote --exit-code --tags origin "refs/tags/v${version}" >/dev/null 2>&1; then
             echo "Tag v${version} already exists; refusing to replace it."
             exit 1

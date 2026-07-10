@@ -130,7 +130,7 @@ PAGE = r"""
       <h1>VPN Control Panel</h1>
       <p class="sub">{{ tr('subtitle') }}</p>
     </div>
-    <nav class="language-switch" aria-label="Language">
+    <nav class="language-switch" aria-label="{{ tr('language_selector') }}">
       <a href="{{ url_for('set_language', language='en') }}"
          class="{{ 'active' if language == 'en' else '' }}"
          lang="en" hreflang="en">EN</a>
@@ -176,7 +176,7 @@ PAGE = r"""
     </section>
 
     <section class="card">
-      <h2>NordVPN</h2>
+      <h2>{{ tr('nordvpn_status') }}</h2>
       <p><strong>{{ tr('public_ip') }}:</strong> {{ public_ip }}</p>
       <p><strong>{{ tr('country_check') }}:</strong> {{ public_country }}</p>
       <pre>{{ nord_status }}</pre>
@@ -353,6 +353,8 @@ def run_nordvpn(
         )
     except subprocess.TimeoutExpired:
         return False, translate(language, "nordvpn_timeout")
+    except (FileNotFoundError, OSError):
+        return False, translate(language, "nordvpn_unavailable")
 
     output = "\n".join(
         part.strip() for part in (completed.stdout, completed.stderr) if part.strip()

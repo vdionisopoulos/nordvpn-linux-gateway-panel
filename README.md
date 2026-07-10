@@ -2,7 +2,7 @@
 
 A lightweight Ubuntu gateway and LAN-only web panel for routing selected TVs, tablets, consoles, and other devices through NordVPN NordLynx.
 
-Current release: **1.0.2**
+Current release: **1.0.3**
 
 ## Features
 
@@ -21,6 +21,17 @@ Current release: **1.0.2**
 ## Screenshot
 
 ![VPN Control Panel showing healthy gateway, protected DNS, and managed devices](docs/panel.png)
+
+The public screenshot is redacted and contains no credentials, public IP address, or private device-identifying information.
+
+## Project documentation
+
+- [Wiki](../../wiki)
+- [Project roadmap](ROADMAP.md)
+- [Ελληνικό roadmap](ROADMAP.el.md)
+- [Fail-closed DNS design](docs/dns.md)
+- [NordVPN authentication and secret handling](docs/nordvpn-authentication.md)
+- [Stable release checklist](docs/release-checklist.md)
 
 ## Architecture
 
@@ -195,6 +206,8 @@ For a complete release or maintenance validation that temporarily disconnects an
 sudo bash scripts/smoke-test.sh --with-failover
 ```
 
+When NordVPN is already connected, the smoke test waits up to 30 seconds for the gateway-managed route and heartbeat to converge before evaluating the initial connected-state checks. Override this only for slow hosts with `VPN_SMOKE_CONVERGENCE_TIMEOUT=<seconds>`.
+
 The failover test verifies that DNS stops when the tunnel is unavailable, the blackhole route remains, the VPN route is removed, and DNS/routing recover after reconnect.
 
 ## Manual verification
@@ -244,11 +257,11 @@ shellcheck -x gateway.sh install.sh update.sh uninstall.sh scripts/smoke-test.sh
 bash -n gateway.sh install.sh update.sh uninstall.sh installer-lib.sh scripts/smoke-test.sh
 ```
 
-CI also validates the rendered nftables ruleset with `nft -c -f` and verifies the systemd units.
+CI also validates release metadata synchronization, the rendered nftables ruleset with `nft -c -f`, and the systemd units.
 
 ## Releases
 
-See [CHANGELOG.md](CHANGELOG.md) for release history and [the stable release checklist](docs/release-checklist.md) for release gates. A signed tag such as `v1.0.2` triggers a validated release workflow that creates ZIP and tar.gz archives plus SHA-256 checksums.
+See [CHANGELOG.md](CHANGELOG.md) for release history and [the stable release checklist](docs/release-checklist.md) for release gates. A tag matching `VERSION`, such as `v1.0.3`, triggers a validated release workflow that creates ZIP and tar.gz archives plus SHA-256 checksums.
 
 ## Security
 

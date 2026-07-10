@@ -4,7 +4,7 @@
 
 Το roadmap είναι ευέλικτο. Η σειρά και το scope μπορούν να αλλάξουν μετά από δοκιμές, feedback χρηστών, security review ή αλλαγές στο NordVPN Linux client. Μια λειτουργία θεωρείται δεσμευμένη μόνο όταν έχει καταγραφεί σε issue ή περιλαμβάνεται σε ενεργό release pull request.
 
-Τρέχουσα σταθερή έκδοση: **v1.0.2**
+Τρέχουσα σταθερή έκδοση: **v1.0.3**
 
 ## Βασικές αρχές
 
@@ -21,20 +21,18 @@
 
 ## v1.0.3 — Maintenance και ποιότητα repository
 
-**Στόχος:** συγκέντρωση μικρών βελτιώσεων χωρίς αλλαγή της routing αρχιτεκτονικής.
+**Κατάσταση:** ολοκληρώθηκε.
 
-Προτεινόμενο scope:
+Περιλαμβάνει:
 
-- Ολοκλήρωση και συντήρηση του GitHub Community Profile.
-- Καθαρισμός obsolete branches και προσωρινών release workflows.
-- Βελτίωση Wiki, screenshots, παραδειγμάτων και troubleshooting οδηγιών.
-- Μικρές διορθώσεις UI και μεταφράσεων.
-- Βελτίωση validation και operational error messages.
-- Ελεγχόμενα dependency updates.
-- Έλεγχος συνέπειας μεταξύ `VERSION`, `CHANGELOG.md`, tags και GitHub Releases.
-- Regression tests για προβλήματα που θα αναφερθούν μετά το v1.0.2.
-
-Η έκδοση αυτή πρέπει να παραμείνει patch release χαμηλού ρίσκου.
+- Ολοκλήρωση των GitHub Community Profile templates.
+- Αφαίρεση του παλιού version-specific tag workflow.
+- Reusable version-aware release publishing.
+- Βελτιώσεις σε αγγλικά και ελληνικά UI labels και operational errors.
+- Ενημέρωση development dependencies.
+- Αυτόματο έλεγχο συγχρονισμού release metadata.
+- Startup convergence handling στο installed-gateway smoke test.
+- Πρόσθετα regression tests και release documentation.
 
 ---
 

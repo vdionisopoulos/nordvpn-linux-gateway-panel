@@ -4,7 +4,7 @@ This document describes the **suggested direction** for future releases of NordV
 
 The roadmap is intentionally flexible. Version scope and ordering may change after testing, user feedback, security review, or changes in the NordVPN Linux client. A feature is not considered committed until it is tracked in an issue or included in an active release pull request.
 
-Current stable release: **v1.0.2**
+Current stable release: **v1.0.3**
 
 ## Guiding principles
 
@@ -21,20 +21,18 @@ Every future change should preserve these guarantees:
 
 ## v1.0.3 — Maintenance and repository quality
 
-**Goal:** consolidate small fixes without changing the routing architecture.
+**Status:** delivered.
 
-Suggested scope:
+Delivered scope:
 
-- Complete and maintain the GitHub Community Profile.
-- Clean up obsolete branches and one-time release workflows.
-- Improve Wiki pages, screenshots, examples, and troubleshooting notes.
-- Correct minor UI and translation issues.
-- Improve validation and operational error messages.
-- Apply reviewed dependency updates.
-- Verify that `VERSION`, `CHANGELOG.md`, tags, and GitHub Releases remain synchronized.
-- Add regression tests for any production issues reported after v1.0.2.
-
-This should remain a low-risk patch release.
+- Completed the GitHub Community Profile templates.
+- Removed the obsolete version-specific tag workflow.
+- Added reusable version-aware release publishing.
+- Improved English and Greek UI labels and operational errors.
+- Updated development dependencies.
+- Added automated release metadata synchronization checks.
+- Added startup convergence handling to the installed-gateway smoke test.
+- Expanded regression coverage and release documentation.
 
 ---
 

@@ -27,6 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/check-version-sync.py
           version="$(tr -d '[:space:]' < VERSION)"
           test -n "$version"
           VPN_WEB_PASSWORD=test VPN_WEB_SECRET_KEY=test \
@@ -35,8 +36,10 @@ jobs:
           source installer-lib.sh
           test "$PROJECT_VERSION" = "$version"
 
-      - name: Python lint
-        run: ruff check .
+      - name: Python syntax and lint
+        run: |
+          python3 -m py_compile app.py i18n.py validation.py scripts/check-version-sync.py
+          ruff check .
 
       - name: Python tests
         run: pytest

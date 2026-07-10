@@ -1,12 +1,9 @@
 ---
 name: Bug report
-about: Report a reproducible problem in the VPN gateway, web panel, DNS, routing,
-  installer, updater, or systemd services
-title: Add screenshots, timing details, recent configuration changes, or anything
-  else that may help.
+about: Report a reproducible gateway, panel, DNS, routing, installer, updater, or service problem
+title: "[Bug] "
 labels: bug
 assignees: ''
-
 ---
 
 ## Description
@@ -34,27 +31,67 @@ What happened instead?
 - Kernel version:
 - Installation type: Physical host / Hyper-V / VMware / VirtualBox / Other
 - NordVPN Linux client version:
-- Browser and version, if the issue concerns the web panel:
-
-Commands that may help:
+- Browser and version, when applicable:
 
 ```bash
 cat /opt/vpn-control/VERSION
 lsb_release -a
 uname -a
 nordvpn version
+```
 
-##Managed-device network configuration
+## Network configuration
+
 - Gateway LAN IPv4:
 - LAN subnet:
 - LAN interface:
-- Managed device type:
-- Managed device IPv4:
+- Managed device type and IPv4:
 - Router/Gateway configured on the device:
 - DNS configured on the device:
 
-##Service Status
+## Service status
+
+```bash
 sudo systemctl status tv-vpn-gateway.service --no-pager -l
 sudo systemctl status vpn-control-dns.service --no-pager -l
 sudo systemctl status vpn-control-web.service --no-pager -l
-Paste the relevant output here:
+```
+
+## Gateway health
+
+```bash
+sudo jq . /run/vpn-control/gateway-health.json
+```
+
+## Routing and nftables
+
+```bash
+ip -4 rule show
+ip -4 route show table 200
+sudo nft list table inet tv_vpn
+sudo nft list table ip tv_vpn_nat
+```
+
+## Relevant logs
+
+```bash
+sudo journalctl -u tv-vpn-gateway.service -u vpn-control-dns.service -u vpn-control-web.service -n 150 --no-pager
+```
+
+## Smoke-test result
+
+```bash
+sudo bash scripts/smoke-test.sh
+```
+
+For failover-related issues:
+
+```bash
+sudo bash scripts/smoke-test.sh --with-failover
+```
+
+## Additional context
+
+Add screenshots, timing details, and recent configuration changes.
+
+Before submitting, redact passwords, tokens, public IP addresses, private device details, and other sensitive information. Report security vulnerabilities through the repository security policy rather than a public issue.
