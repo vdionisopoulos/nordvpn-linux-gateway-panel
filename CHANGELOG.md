@@ -10,6 +10,8 @@ All notable changes to this project are documented here.
 - Release metadata consistency checker for `VERSION`, changelog, English and Greek READMEs, and roadmaps
 - Reusable manually dispatched release-tag workflow that publishes the version declared by `VERSION`
 - English and Greek project roadmaps
+- Startup convergence wait in the installed-gateway smoke test to avoid false failures immediately after update
+- Regression coverage for the smoke-test convergence gate
 
 ### Changed
 
@@ -23,7 +25,7 @@ All notable changes to this project are documented here.
 - Repaired the malformed bug-report template and completed its diagnostic and privacy guidance
 - Removed the obsolete version-specific one-time tag publisher
 - Reduced ambiguity between healthy, fail-closed, stale, and degraded web-panel states
-- Prevented false startup failures by waiting for the connected gateway route and heartbeat to converge before smoke-test assertions
+- Prevented the release smoke test from reporting missing VPN route and DNS failures before the gateway reconciliation loop completed
 
 ## [1.0.2] - 2026-07-07
 
