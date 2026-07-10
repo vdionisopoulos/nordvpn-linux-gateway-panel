@@ -23,6 +23,7 @@ All notable changes to this project are documented here.
 - Repaired the malformed bug-report template and completed its diagnostic and privacy guidance
 - Removed the obsolete version-specific one-time tag publisher
 - Reduced ambiguity between healthy, fail-closed, stale, and degraded web-panel states
+- Prevented false startup failures by waiting for the connected gateway route and heartbeat to converge before smoke-test assertions
 
 ## [1.0.2] - 2026-07-07
 
