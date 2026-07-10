@@ -19,18 +19,20 @@
 
 ---
 
-## Παραδόθηκε στο v1.0.3 — Maintenance και ποιότητα repository
+## v1.0.3 — Maintenance και ποιότητα repository
 
-Η maintenance έκδοση ολοκλήρωσε το αρχικό scope ποιότητας χωρίς αλλαγή της routing αρχιτεκτονικής:
+**Κατάσταση:** ολοκληρώθηκε.
 
-- Ολοκληρώθηκε το Community Profile με Code of Conduct και contribution templates.
-- Διορθώθηκαν και επεκτάθηκαν τα bug-report και pull-request templates.
-- Προστέθηκε δομημένο feature-request form.
-- Αφαιρέθηκε το obsolete version-specific tag workflow και προστέθηκε reusable publisher.
-- Προστέθηκαν έλεγχοι συγχρονισμού release metadata.
-- Αναβαθμίστηκαν τα pytest και Ruff μετά από έλεγχο.
-- Βελτιώθηκαν τα αγγλικά και ελληνικά UI labels και operational messages.
-- Προστέθηκαν αγγλικό και ελληνικό roadmap και βελτιώθηκε η τεκμηρίωση.
+Περιλαμβάνει:
+
+- Ολοκλήρωση των GitHub Community Profile templates.
+- Αφαίρεση του παλιού version-specific tag workflow.
+- Reusable version-aware release publishing.
+- Βελτιώσεις σε αγγλικά και ελληνικά UI labels και operational errors.
+- Ενημέρωση development dependencies.
+- Αυτόματο έλεγχο συγχρονισμού release metadata.
+- Startup convergence handling στο installed-gateway smoke test.
+- Πρόσθετα regression tests και release documentation.
 
 ---
 
@@ -161,8 +163,8 @@ vpn_reconnect_total
 ```text
 Living-room TV → United States
 Bedroom TV     → Greece
-Tablet         → Germany
-Console        → United Kingdom
+Tablet          → Germany
+Console         → United Kingdom
 ```
 
 Πρόκειται για μεγάλη αρχιτεκτονική αλλαγή που απαιτεί έρευνα και prototype. Επειδή το NordVPN CLI συνήθως διαχειρίζεται ένα ενεργό tunnel, μια πιθανή σχεδίαση μπορεί να απαιτεί:
