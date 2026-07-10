@@ -19,18 +19,20 @@ Every future change should preserve these guarantees:
 
 ---
 
-## Delivered in v1.0.3 — Maintenance and repository quality
+## v1.0.3 — Maintenance and repository quality
 
-The maintenance release completed the initial repository-quality scope without changing the routing architecture:
+**Status:** delivered.
 
-- Completed the Community Profile with a Code of Conduct and contribution templates.
-- Repaired and expanded bug-report and pull-request templates.
-- Added a structured feature-request form.
-- Removed the obsolete version-specific tag workflow and introduced a reusable publisher.
-- Added release metadata synchronization checks.
-- Updated pytest and Ruff after review.
-- Refined English and Greek UI labels and operational messages.
-- Added English and Greek roadmaps and improved repository documentation.
+Delivered scope:
+
+- Completed the GitHub Community Profile templates.
+- Removed the obsolete version-specific tag workflow.
+- Added reusable version-aware release publishing.
+- Improved English and Greek UI labels and operational errors.
+- Updated development dependencies.
+- Added automated release metadata synchronization checks.
+- Added startup convergence handling to the installed-gateway smoke test.
+- Expanded regression coverage and release documentation.
 
 ---
 
@@ -161,8 +163,8 @@ Example target behavior:
 ```text
 Living-room TV → United States
 Bedroom TV     → Greece
-Tablet         → Germany
-Console        → United Kingdom
+Tablet          → Germany
+Console         → United Kingdom
 ```
 
 This is a major architectural change and requires research and prototyping. The current NordVPN CLI normally manages one active tunnel, so a possible design may require:
