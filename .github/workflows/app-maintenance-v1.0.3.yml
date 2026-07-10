@@ -1,0 +1,61 @@
+name: Apply v1.0.3 panel maintenance
+
+on:
+  push:
+    branches:
+      - release/v1.0.3
+    paths:
+      - .github/workflows/app-maintenance-v1.0.3.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v1.0.3
+          fetch-depth: 0
+
+      - name: Apply focused application edits
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("app.py")
+          text = path.read_text(encoding="utf-8")
+
+          replacements = {
+              '<nav class="language-switch" aria-label="Language">':
+                  '<nav class="language-switch" aria-label="{{ tr(\'language_selector\') }}">',
+              '<h2>NordVPN</h2>': '<h2>{{ tr(\'nordvpn_status\') }}</h2>',
+              '    except subprocess.TimeoutExpired:\n        return False, translate(language, "nordvpn_timeout")\n': (
+                  '    except subprocess.TimeoutExpired:\n'
+                  '        return False, translate(language, "nordvpn_timeout")\n'
+                  '    except (FileNotFoundError, OSError):\n'
+                  '        return False, translate(language, "nordvpn_unavailable")\n'
+              ),
+          }
+
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"Expected application fragment not found: {old}")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Commit application edits and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py
+          git rm .github/workflows/app-maintenance-v1.0.3.yml
+          git diff --cached --check
+          git commit -m "Refine panel labels and NordVPN CLI errors"
+          git push origin HEAD:release/v1.0.3
