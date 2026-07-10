@@ -36,4 +36,4 @@ def test_country_catalog_is_complete_in_both_languages() -> None:
 
 def test_parameterized_translation() -> None:
     assert translate("en", "seconds_ago", seconds=3) == "3s ago"
-    assert translate("el", "seconds_ago", seconds=3) == "πριν από 3s"
+    assert translate("el", "seconds_ago", seconds=3) == "πριν από 3 δευτ."
