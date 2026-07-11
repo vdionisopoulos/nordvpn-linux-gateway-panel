@@ -73,11 +73,10 @@ Confirm:
 
 After the release pull request is approved and merged:
 
-```bash
-git switch main
-git pull --ff-only
-git tag -a v1.0.0 -m "NordVPN Linux Gateway Panel v1.0.0"
-git push origin v1.0.0
-```
+1. Open **Actions**.
+2. Select **Publish current release tag**.
+3. Run the workflow from `main` with the version number without the `v` prefix.
+4. Confirm that the workflow creates the annotated `vX.Y.Z` tag and explicitly dispatches the **Release** workflow.
+5. Confirm that **Release** validates the tagged source, creates the ZIP and tar.gz archives plus `SHA256SUMS`, and publishes the GitHub Release as Latest.
 
-Pushing the annotated tag runs the release workflow, validates the tagged source again, creates source archives and SHA-256 checksums, and publishes the GitHub Release.
+If a tag already exists because a previous publication stopped before the release workflow ran, manually run **Release** from `main` with the same version number. The workflow checks out and validates the existing tag before publishing any assets.
