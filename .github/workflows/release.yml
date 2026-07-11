@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, without the v prefix
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,9 +17,12 @@ permissions:
 jobs:
   validate-and-release:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
 
       - name: Install validation tools
@@ -30,7 +39,7 @@ jobs:
           python3 scripts/check-version-sync.py
           version="$(tr -d '[:space:]' < VERSION)"
           test -n "$version"
-          test "$GITHUB_REF_NAME" = "v${version}"
+          test "$RELEASE_TAG" = "v${version}"
           grep -Eq "^## \[${version//./\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md
           VPN_WEB_PASSWORD=test VPN_WEB_SECRET_KEY=test \
             python3 -c 'import app; assert app.APP_VERSION == open("VERSION", encoding="utf-8").read().strip()'
@@ -95,7 +104,7 @@ jobs:
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < VERSION)"
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "$RELEASE_TAG" \
             dist/* \
             --verify-tag \
             --latest \
